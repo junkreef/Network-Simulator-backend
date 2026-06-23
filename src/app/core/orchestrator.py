@@ -117,11 +117,10 @@ class Orchestrator:
                 frr_conf_path = os.path.join(node_config_dir, "frr.conf")
                 if os.path.exists(frr_conf_path) and os.path.isdir(frr_conf_path):
                     shutil.rmtree(frr_conf_path)
-                if not os.path.exists(frr_conf_path):
-                    with open(frr_conf_path, "w") as f:
-                        f.write("log file /var/log/frr/frr.log\n!\n")
-                        f.flush()
-                        os.fsync(f.fileno())
+                with open(frr_conf_path, "w") as f:
+                    f.write("log file /var/log/frr/frr.log\n!\n")
+                    f.flush()
+                    os.fsync(f.fileno())
                 try:
                     os.chmod(frr_conf_path, 0o777)
                 except Exception:
@@ -353,9 +352,17 @@ class Orchestrator:
                         logger.error(f"Failed to assign IP to {if_name}: {res.output.decode()}")
                     container.exec_run(["ip", "link", "set", "dev", if_name, "up"])
             
+            # Configure default gateway if specified
+            gateway = config_data.get("gateway")
+            if gateway:
+                container.exec_run(["ip", "route", "del", "default"])
+                res = container.exec_run(["ip", "route", "add", "default", "via", gateway])
+                if res.exit_code != 0:
+                    logger.error(f"Failed to configure default gateway {gateway}: {res.output.decode()}")
+
             return {
                 "status": "success",
-                "output": "Terminal interfaces configured successfully via ip route commands"
+                "output": "Terminal interfaces and routing configured successfully"
             }
 
         # 2. Render frr.conf for router

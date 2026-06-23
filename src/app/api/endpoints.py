@@ -67,6 +67,7 @@ class RouterConfigureRequest(BaseModel):
     interfaces: List[InterfaceConfig] = []
     vlan_interfaces: List[VlanInterfaceConfig] = []
     routing: Optional[RoutingConfig] = None
+    gateway: Optional[str] = None
 
 # --- Endpoints ---
 
