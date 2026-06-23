@@ -1,0 +1,33 @@
+name: {{ topology_name }}
+
+topology:
+  defaults:
+    kind: linux
+  
+  nodes:
+    {% for node in nodes %}
+    {{ node.name }}:
+      {% if node.type == 'router' %}
+      image: alpine-frr:latest
+      binds:
+        # ルーターの場合は、初期設定用のディレクトリをマウント
+        - {{ config_dir }}/{{ node.name }}/daemons:/etc/frr/daemons:ro
+        - {{ config_dir }}/{{ node.name }}/frr.conf:/etc/frr/frr.conf.import:ro
+        - {{ config_dir }}/{{ node.name }}/vtysh.conf:/etc/frr/vtysh.conf:ro
+      {% else %}
+      image: alpine-terminal:latest
+      {% endif %}
+      exec:
+        # 起動後にインターフェース設定等を適用するための初期化コマンド
+        {% for iface in node.interfaces %}
+        - ip link set dev {{ iface }} up || true
+        {% endfor %}
+    {% endfor %}
+
+  links:
+    {% for link in links %}
+    - endpoints:
+      {% for endpoint in link.endpoints %}
+      - "{{ endpoint }}"
+      {% endfor %}
+    {% endfor %}

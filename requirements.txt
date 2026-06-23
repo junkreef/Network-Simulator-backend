@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+jinja2
+docker
+pytest
+httpx
+websockets
+pydantic
+pydantic-settings

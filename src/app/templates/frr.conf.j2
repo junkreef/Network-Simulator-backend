@@ -1,0 +1,47 @@
+log file /var/log/frr/frr.log
+!
+{% for iface in interfaces %}
+interface {{ iface.name }}
+  {% if iface.ip_address %}
+  ip address {{ iface.ip_address }}
+  {% endif %}
+!
+{% endfor %}
+{% for viface in vlan_interfaces %}
+interface {{ viface.name }}
+  {% if viface.ip_address %}
+  ip address {{ viface.ip_address }}
+  {% endif %}
+!
+{% endfor %}
+!
+{% if routing and routing.ospf and routing.ospf.enabled %}
+router ospf
+  {% if routing.ospf.router_id %}
+  ospf router-id {{ routing.ospf.router_id }}
+  {% endif %}
+  {% for area in routing.ospf.areas %}
+    {% for net in area.networks %}
+  network {{ net }} area {{ area.area_id }}
+    {% endfor %}
+  {% endfor %}
+!
+{% endif %}
+{% if routing and routing.rip and routing.rip.enabled %}
+router rip
+  {% for net in routing.rip.networks %}
+  network {{ net }}
+  {% endfor %}
+!
+{% endif %}
+{% if routing and routing.bgp and routing.bgp.enabled %}
+router bgp {{ routing.bgp.as_number }}
+  {% if routing.bgp.router_id %}
+  bgp router-id {{ routing.bgp.router_id }}
+  {% endif %}
+  {% for neighbor in routing.bgp.neighbors %}
+  neighbor {{ neighbor.ip_address }} remote-as {{ neighbor.remote_as }}
+  neighbor {{ neighbor.ip_address }} activate
+  {% endfor %}
+!
+{% endif %}
