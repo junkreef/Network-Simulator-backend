@@ -105,3 +105,106 @@ def test_full_integration_flow(client: TestClient):
         destroy_res = client.post("/api/v1/topology/destroy")
         assert destroy_res.status_code == 200
         assert destroy_res.json()["status"] == "success"
+
+
+def test_switch_integration_flow(client: TestClient):
+    # Ensure any previous topology is destroyed before starting
+    client.post("/api/v1/topology/destroy")
+
+    # 1. Deploy topology with switch
+    deploy_payload = {
+        "name": "sim-switch-net",
+        "nodes": [
+            {"name": "t1", "type": "terminal", "interfaces": ["eth1"]},
+            {"name": "sw1", "type": "switch", "interfaces": ["eth1", "eth2"]},
+            {"name": "r1", "type": "router", "interfaces": ["eth1"]}
+        ],
+        "links": [
+            {"endpoints": ["t1:eth1", "sw1:eth1"]},
+            {"endpoints": ["r1:eth1", "sw1:eth2"]}
+        ]
+    }
+    
+    deploy_res = client.post("/api/v1/topology/deploy", json=deploy_payload)
+    assert deploy_res.status_code == 200
+    assert deploy_res.json()["status"] == "success"
+
+    # Wait a bit for containerlab startup to settle
+    time.sleep(10)
+
+    try:
+        # 2. Check topology status
+        status_res = client.get("/api/v1/topology/status")
+        assert status_res.status_code == 200
+        status_data = status_res.json()
+        assert status_data["topology_name"] == "sim-switch-net"
+        assert status_data["status"] == "running"
+        
+        nodes = {n["name"]: n for n in status_data["nodes"]}
+        assert "clab-sim-switch-net-t1" in nodes
+        assert "clab-sim-switch-net-sw1" in nodes
+        assert "clab-sim-switch-net-r1" in nodes
+        
+        # 3. Configure sw1 (L2 switch)
+        sw1_config = {
+            "interfaces": [
+                {"name": "eth1", "vlan_mode": "access", "vlan_id": 10},
+                {"name": "eth2", "vlan_mode": "trunk", "vlan_ids": [10]}
+            ],
+            "vlan_interfaces": [],
+            "routing": {}
+        }
+        sw1_conf_res = client.post("/api/v1/nodes/sw1/configure", json=sw1_config)
+        assert sw1_conf_res.status_code == 200, f"Configure sw1 failed: {sw1_conf_res.json()}"
+        assert sw1_conf_res.json()["status"] == "success"
+
+        # 4. Configure t1
+        t1_config = {
+            "interfaces": [
+                {"name": "eth1", "ip_address": "10.0.10.1/24"}
+            ],
+            "vlan_interfaces": [],
+            "routing": {}
+        }
+        t1_conf_res = client.post("/api/v1/nodes/t1/configure", json=t1_config)
+        assert t1_conf_res.status_code == 200
+        assert t1_conf_res.json()["status"] == "success"
+
+        # 5. Configure r1 with vlan interface
+        r1_config = {
+            "interfaces": [
+                {"name": "eth1"}
+            ],
+            "vlan_interfaces": [
+                {"name": "eth1.10", "parent": "eth1", "vlan_id": 10, "ip_address": "10.0.10.254/24"}
+            ],
+            "routing": {}
+        }
+        r1_conf_res = client.post("/api/v1/nodes/r1/configure", json=r1_config)
+        assert r1_conf_res.status_code == 200
+        assert r1_conf_res.json()["status"] == "success"
+
+        # Give some time for IPs to be applied and interfaces to wake up
+        time.sleep(2)
+
+        # 6. Check data plane connectivity (Ping from t1 to r1 vlan interface)
+        docker_client = docker.from_env()
+        t1_container = None
+        for c in docker_client.containers.list():
+            if c.name == "clab-sim-switch-net-t1":
+                t1_container = c
+                break
+                
+        assert t1_container is not None, "t1 container not found via docker-py"
+        
+        # Run ping command inside t1 to r1's IP (10.0.10.254)
+        ping_res = t1_container.exec_run(["ping", "-c", "3", "10.0.10.254"])
+        print(f"Switch Ping Output: {ping_res.output.decode()}")
+        assert ping_res.exit_code == 0, f"Ping failed: {ping_res.output.decode()}"
+
+    finally:
+        # 7. Destroy topology
+        destroy_res = client.post("/api/v1/topology/destroy")
+        assert destroy_res.status_code == 200
+        assert destroy_res.json()["status"] == "success"
+

@@ -4,6 +4,7 @@ import subprocess
 import json
 import logging
 import docker
+import time
 from jinja2 import Environment, FileSystemLoader
 from app.core.config import settings
 
@@ -60,11 +61,17 @@ class Orchestrator:
             node_name = node.get("name")
             node_type = node.get("type")
             if node_type == "router":
-                node_config_dir = os.path.join(settings.CONFIG_DIR, node_name)
+                node_config_dir = os.path.join(settings.CONFIG_DIR, topology_name, node_name)
                 os.makedirs(node_config_dir, exist_ok=True)
+                try:
+                    os.chmod(node_config_dir, 0o777)
+                except Exception:
+                    pass
                 
                 # Write daemons file
                 daemons_path = os.path.join(node_config_dir, "daemons")
+                if os.path.isdir(daemons_path):
+                    shutil.rmtree(daemons_path)
                 with open(daemons_path, "w") as f:
                     f.write(
                         "zebra=yes\n"
@@ -86,17 +93,39 @@ class Orchestrator:
                         "vrrpd=no\n"
                         "pathd=no\n"
                     )
+                    f.flush()
+                    os.fsync(f.fileno())
+                try:
+                    os.chmod(daemons_path, 0o777)
+                except Exception:
+                    pass
                 
                 # Write vtysh.conf
                 vtysh_conf_path = os.path.join(node_config_dir, "vtysh.conf")
+                if os.path.isdir(vtysh_conf_path):
+                    shutil.rmtree(vtysh_conf_path)
                 with open(vtysh_conf_path, "w") as f:
                     f.write("service integrated-vtysh-config\n")
-
+                    f.flush()
+                    os.fsync(f.fileno())
+                try:
+                    os.chmod(vtysh_conf_path, 0o777)
+                except Exception:
+                    pass
+ 
                 # Write initial empty frr.conf if not exists
                 frr_conf_path = os.path.join(node_config_dir, "frr.conf")
+                if os.path.exists(frr_conf_path) and os.path.isdir(frr_conf_path):
+                    shutil.rmtree(frr_conf_path)
                 if not os.path.exists(frr_conf_path):
                     with open(frr_conf_path, "w") as f:
                         f.write("log file /var/log/frr/frr.log\n!\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                try:
+                    os.chmod(frr_conf_path, 0o777)
+                except Exception:
+                    pass
 
         # 2. Render topology.clab.yml
         template = self.jinja_env.get_template("topology.clab.yml.j2")
@@ -110,9 +139,13 @@ class Orchestrator:
         topo_filepath = self.get_topology_filepath()
         with open(topo_filepath, "w") as f:
             f.write(rendered_yml)
+            f.flush()
+            os.fsync(f.fileno())
 
         # 3. Execute containerlab deploy
         # We use --reconfigure to ensure everything is rebuilt cleanly
+        import time
+        time.sleep(1)
         cmd = ["containerlab", "deploy", "-t", topo_filepath, "--reconfigure"]
         self._run_cmd(cmd)
 
@@ -158,24 +191,61 @@ class Orchestrator:
         """Get the topology status using containerlab inspect."""
         topo_filepath = self.get_topology_filepath()
         if not os.path.exists(topo_filepath):
+            logger.warning(f"Topology file does not exist at {topo_filepath}")
             return {
                 "topology_name": "",
                 "status": "stopped",
                 "nodes": []
             }
 
+        # Parse the expected topology name from the configuration file
+        expected_name = ""
+        try:
+            with open(topo_filepath, "r") as f:
+                for line in f:
+                    if line.strip().startswith("name:"):
+                        expected_name = line.split(":", 1)[1].strip()
+                        break
+        except Exception as e:
+            logger.warning(f"Failed to read name from topology file: {e}")
+
         try:
             # Run containerlab inspect to get JSON format status
             cmd = ["containerlab", "inspect", "-t", topo_filepath, "--format", "json"]
-            result = self._run_cmd(cmd)
-            data = json.loads(result.stdout)
             
-            # Since the outer keys are lab names (e.g. {"sim-network": [...]})
+            # Retry loop to account for containerlab/docker startup state sync delays
+            data = {}
+            for attempt in range(5):
+                try:
+                    result = self._run_cmd(cmd)
+                    stdout = result.stdout
+                    # Safe JSON parsing
+                    start_idx = stdout.find('{')
+                    if start_idx == -1:
+                        start_idx = stdout.find('[')
+                    if start_idx != -1:
+                        parsed_data = json.loads(stdout[start_idx:])
+                    else:
+                        parsed_data = json.loads(stdout)
+                    
+                    if parsed_data and (not expected_name or expected_name in parsed_data):
+                        data = parsed_data
+                        break
+                except Exception as e:
+                    if attempt == 4:
+                        raise e
+                logger.warning(f"containerlab inspect not ready yet, retrying in 2s... (attempt {attempt+1}/5)")
+                time.sleep(2)
+            
             topology_name = ""
             nodes_list = []
             if data:
-                topology_name = list(data.keys())[0]
-                nodes_list = data[topology_name]
+                if expected_name and expected_name in data:
+                    topology_name = expected_name
+                    nodes_list = data[expected_name]
+                else:
+                    topology_name = list(data.keys())[0]
+                    nodes_list = data[topology_name]
             
             nodes_status = []
             for node in nodes_list:
@@ -202,7 +272,7 @@ class Orchestrator:
 
     def configure_node(self, node_name: str, config_data: dict) -> dict:
         """
-        Configure an FRR router node or a standard terminal node.
+        Configure an FRR router node, L2 switch node, or a standard terminal node.
         config_data contains: interfaces, vlan_interfaces, routing
         """
         if not self.docker_client:
@@ -212,9 +282,48 @@ class Orchestrator:
         if not container:
             raise Exception(f"Container for node {node_name} not found")
 
-        # Determine if it's a router
+        # Determine if it's a router or switch
         image_name = container.image.tags[0] if container.image.tags else ""
         is_router = "frr" in image_name or "router" in node_name
+        is_switch = "switch" in image_name or "switch" in node_name
+
+        if is_switch:
+            # Create br0 with vlan_filtering=1, forward_delay=0, stp=0 and bring it up
+            container.exec_run(["ip", "link", "add", "name", "br0", "type", "bridge", "vlan_filtering", "1", "forward_delay", "0", "stp_state", "0"])
+            container.exec_run(["ip", "link", "set", "dev", "br0", "up"])
+
+            interfaces = config_data.get("interfaces", [])
+            for iface in interfaces:
+                if_name = iface.get("name")
+                if not if_name:
+                    continue
+
+                # Add physical interface to bridge and bring it up
+                container.exec_run(["ip", "link", "set", "dev", if_name, "master", "br0"])
+                container.exec_run(["ip", "link", "set", "dev", if_name, "up"])
+
+                # Remove default vlan 1
+                container.exec_run(["bridge", "vlan", "del", "dev", if_name, "vid", "1"])
+
+                vlan_mode_raw = iface.get("vlan_mode")
+                vlan_mode = vlan_mode_raw.lower() if vlan_mode_raw else "access"
+                if vlan_mode == "access":
+                    vlan_id = iface.get("vlan_id")
+                    if vlan_id is not None:
+                        res = container.exec_run(["bridge", "vlan", "add", "dev", if_name, "vid", str(vlan_id), "pvid", "untagged"])
+                        if res.exit_code != 0:
+                            logger.error(f"Failed to configure access vlan {vlan_id} on {if_name}: {res.output.decode()}")
+                elif vlan_mode == "trunk":
+                    vlan_ids = iface.get("vlan_ids", [])
+                    for vid in vlan_ids:
+                        res = container.exec_run(["bridge", "vlan", "add", "dev", if_name, "vid", str(vid)])
+                        if res.exit_code != 0:
+                            logger.error(f"Failed to configure trunk vlan {vid} on {if_name}: {res.output.decode()}")
+
+            return {
+                "status": "success",
+                "output": "L2 Switch configured successfully with VLAN filtering"
+            }
 
         # 1. Manage VLAN subinterfaces on Linux kernel inside the container
         vlan_interfaces = config_data.get("vlan_interfaces", [])
@@ -257,6 +366,14 @@ class Orchestrator:
             routing=config_data.get("routing", {})
         )
 
+        # Wait for vtysh/daemons to be ready (up to 15 seconds)
+        for i in range(15):
+            res = container.exec_run(["vtysh", "-c", "write"])
+            if res.exit_code == 0:
+                break
+            logger.info(f"Waiting for vtysh to be responsive inside {node_name}... ({i+1}/15)")
+            time.sleep(1)
+
         # 3. Apply config using frr-reload.py
         # Write to temporary file in container /etc/frr/frr.conf.new
         write_cmd = f"cat << 'EOF' > /etc/frr/frr.conf.new\n{rendered_conf}\nEOF"
@@ -277,10 +394,25 @@ class Orchestrator:
             raise Exception(f"Configuration reload failed: {error_output}")
 
         # If success, update host config file for persistent configuration (mounted as rw)
-        node_config_path = os.path.join(settings.CONFIG_DIR, node_name, "frr.conf")
+        topo_name = "sim-network"
+        topo_filepath = self.get_topology_filepath()
+        if os.path.exists(topo_filepath):
+            try:
+                with open(topo_filepath, "r") as f:
+                    for line in f:
+                        if line.strip().startswith("name:"):
+                            topo_name = line.split(":", 1)[1].strip()
+                            break
+            except Exception:
+                pass
+        node_config_path = os.path.join(settings.CONFIG_DIR, topo_name, node_name, "frr.conf")
         os.makedirs(os.path.dirname(node_config_path), exist_ok=True)
         with open(node_config_path, "w") as f:
             f.write(rendered_conf)
+        try:
+            os.chmod(node_config_path, 0o777)
+        except Exception:
+            pass
 
         return {
             "status": "success",
@@ -340,10 +472,25 @@ class Orchestrator:
 
     def _get_container_by_name(self, node_name: str):
         """Find a docker container by its short name (e.g. 'r1') or containerlab full name (e.g. 'clab-sim-network-r1')."""
+        topo_name = ""
+        topo_filepath = self.get_topology_filepath()
+        if os.path.exists(topo_filepath):
+            try:
+                with open(topo_filepath, "r") as f:
+                    for line in f:
+                        if line.strip().startswith("name:"):
+                            topo_name = line.split(":", 1)[1].strip()
+                            break
+            except Exception:
+                pass
+
         containers = self.docker_client.containers.list()
-        # Containerlab name format is clab-<topo_name>-<node_name>
         for c in containers:
-            if c.name == node_name or c.name.endswith(f"-{node_name}"):
+            if c.name == node_name:
+                return c
+            if topo_name and c.name == f"clab-{topo_name}-{node_name}":
+                return c
+            if not topo_name and c.name.endswith(f"-{node_name}"):
                 return c
         return None
 

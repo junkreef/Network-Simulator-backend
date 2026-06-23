@@ -11,9 +11,11 @@ topology:
       image: alpine-frr:latest
       binds:
         # ルーターの場合は、初期設定用のディレクトリをマウント
-        - {{ config_dir }}/{{ node.name }}/daemons:/etc/frr/daemons:ro
-        - {{ config_dir }}/{{ node.name }}/frr.conf:/etc/frr/frr.conf.import:ro
-        - {{ config_dir }}/{{ node.name }}/vtysh.conf:/etc/frr/vtysh.conf:ro
+        - {{ config_dir }}/{{ topology_name }}/{{ node.name }}/daemons:/etc/frr/daemons:ro
+        - {{ config_dir }}/{{ topology_name }}/{{ node.name }}/frr.conf:/etc/frr/frr.conf.import:ro
+        - {{ config_dir }}/{{ topology_name }}/{{ node.name }}/vtysh.conf:/etc/frr/vtysh.conf:ro
+      {% elif node.type == 'switch' %}
+      image: alpine-switch:latest
       {% else %}
       image: alpine-terminal:latest
       {% endif %}

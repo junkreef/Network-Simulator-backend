@@ -25,6 +25,9 @@ class TopologyDeployRequest(BaseModel):
 class InterfaceConfig(BaseModel):
     name: str
     ip_address: Optional[str] = None
+    vlan_mode: Optional[str] = None
+    vlan_id: Optional[int] = None
+    vlan_ids: Optional[List[int]] = None
 
 class VlanInterfaceConfig(BaseModel):
     name: str

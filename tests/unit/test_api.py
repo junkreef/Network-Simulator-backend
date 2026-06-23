@@ -74,7 +74,26 @@ def test_configure_node_api(mock_orch_class, client: TestClient):
     response = client.post("/api/v1/nodes/r1/configure", json=payload)
     assert response.status_code == 200
     assert response.json()["status"] == "success"
-    mock_orch.configure_node.assert_called_once_with("r1", payload)
+    expected_payload = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24", "vlan_mode": None, "vlan_id": None, "vlan_ids": None}
+        ],
+        "vlan_interfaces": [
+            {"name": "eth1.10", "parent": "eth1", "vlan_id": 10, "ip_address": "10.0.10.1/24"}
+        ],
+        "routing": {
+            "ospf": {
+                "enabled": True,
+                "router_id": "1.1.1.1",
+                "areas": [
+                    {"area_id": "0", "networks": ["10.0.0.0/24"]}
+                ]
+            },
+            "rip": None,
+            "bgp": None
+        }
+    }
+    mock_orch.configure_node.assert_called_once_with("r1", expected_payload)
 
 @mock.patch("app.api.endpoints.Orchestrator")
 def test_get_runtime_info_api(mock_orch_class, client: TestClient):

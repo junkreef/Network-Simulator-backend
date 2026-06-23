@@ -30,10 +30,10 @@ def test_deploy_topology_rendering(tmp_path, monkeypatch):
     assert res["status"] == "success"
     
     # Check if directories were created
-    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "r1"))
-    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "r1", "daemons"))
-    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "r1", "vtysh.conf"))
-    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "r1", "frr.conf"))
+    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "test-net", "r1"))
+    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "test-net", "r1", "daemons"))
+    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "test-net", "r1", "vtysh.conf"))
+    assert os.path.exists(os.path.join(settings.CONFIG_DIR, "test-net", "r1", "frr.conf"))
     
     # Verify written topology file content
     topo_path = os.path.join(settings.CONFIG_DIR, "topology.clab.yml")
@@ -86,8 +86,8 @@ def test_configure_node_rendering(mock_get_container, tmp_path, monkeypatch):
     res = orch.configure_node("r1", config_data)
     assert res["status"] == "success"
     
-    # Check if configurations were written to CONFIG_DIR/r1/frr.conf
-    frr_conf_path = os.path.join(settings.CONFIG_DIR, "r1", "frr.conf")
+    # Check if configurations were written to CONFIG_DIR/sim-network/r1/frr.conf
+    frr_conf_path = os.path.join(settings.CONFIG_DIR, "sim-network", "r1", "frr.conf")
     assert os.path.exists(frr_conf_path)
     with open(frr_conf_path, "r") as f:
         written_content = f.read()

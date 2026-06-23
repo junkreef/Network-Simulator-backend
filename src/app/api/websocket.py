@@ -7,6 +7,29 @@ from app.core.orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+def _safe_write(sock, data: bytes):
+    """Safely write data to docker exec socket by unwrapping socket."""
+    # Unwrap socket if it's a wrapper (like SocketIO or HTTPResponse)
+    real_sock = sock
+    for attr in ["_sock", "socket", "_socket", "raw"]:
+        if hasattr(real_sock, attr):
+            val = getattr(real_sock, attr)
+            if val is not None:
+                real_sock = val
+
+    try:
+        if hasattr(real_sock, "sendall"):
+            real_sock.sendall(data)
+        elif hasattr(real_sock, "send"):
+            real_sock.send(data)
+        else:
+            sock.write(data)
+            if hasattr(sock, "flush"):
+                sock.flush()
+    except Exception as e:
+        logger.error(f"Failed to write to docker socket: {e}")
+        raise e
+
 @router.websocket("/ws/terminal/{node_name}")
 async def websocket_terminal(websocket: WebSocket, node_name: str):
     await websocket.accept()
@@ -38,6 +61,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         
         # exec_start with socket=True returns a SocketIO-like object
         docker_socket = client.api.exec_start(exec_inst["Id"], socket=True)
+        print(f"DEBUG: docker_socket type: {type(docker_socket)}, dir: {dir(docker_socket)}")
     except Exception as e:
         logger.error(f"Failed to start exec session: {e}")
         await websocket.close(code=4005, reason=f"Failed to start terminal: {str(e)}")
@@ -92,27 +116,17 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                             client.api.exec_resize(exec_id, height=rows, width=cols)
                         elif event == "input":
                             input_data = data_json.get("data", "")
-                            def _write():
-                                docker_socket.write(input_data.encode("utf-8"))
-                                if hasattr(docker_socket, "flush"):
-                                    docker_socket.flush()
-                            await anyio.to_thread.run_sync(_write)
+                            await anyio.to_thread.run_sync(_safe_write, docker_socket, input_data.encode("utf-8"))
                         else:
                             # Other JSON, write raw
-                            def _write():
-                                docker_socket.write(text_data.encode("utf-8"))
-                            await anyio.to_thread.run_sync(_write)
+                            await anyio.to_thread.run_sync(_safe_write, docker_socket, text_data.encode("utf-8"))
                     except json.JSONDecodeError:
                         # Raw string input (terminal keystrokes)
-                        def _write():
-                            docker_socket.write(text_data.encode("utf-8"))
-                        await anyio.to_thread.run_sync(_write)
+                        await anyio.to_thread.run_sync(_safe_write, docker_socket, text_data.encode("utf-8"))
                 
                 bytes_data = message.get("bytes")
                 if bytes_data:
-                    def _write():
-                        docker_socket.write(bytes_data)
-                    await anyio.to_thread.run_sync(_write)
+                    await anyio.to_thread.run_sync(_safe_write, docker_socket, bytes_data)
                     
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")

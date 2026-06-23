@@ -28,6 +28,10 @@ def build_docker_images():
         terminal_path = os.path.join(base_dir, "docker", "terminal")
         print("Building alpine-terminal:latest...")
         client.images.build(path=terminal_path, tag="alpine-terminal:latest", rm=True)
+
+        switch_path = os.path.join(base_dir, "docker", "switch")
+        print("Building alpine-switch:latest...")
+        client.images.build(path=switch_path, tag="alpine-switch:latest", rm=True)
     except Exception as e:
         print(f"Could not build Docker images (Docker may not be running): {e}")
 
