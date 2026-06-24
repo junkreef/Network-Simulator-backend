@@ -26,7 +26,7 @@ def _safe_write(sock, data: bytes):
             sock.write(data)
             if hasattr(sock, "flush"):
                 sock.flush()
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Failed to write to docker socket: %s", e)
         raise e
 
@@ -62,7 +62,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         # exec_start with socket=True returns a SocketIO-like object
         docker_socket = client.api.exec_start(exec_inst["Id"], socket=True)
         print(f"DEBUG: docker_socket type: {type(docker_socket)}, dir: {dir(docker_socket)}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Failed to start exec session: %s", e)
         await websocket.close(code=4005, reason=f"Failed to start terminal: {str(e)}")
         return
@@ -79,7 +79,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                         # read() blocks until data is available or socket is closed
                         # docker-py socket wrapper read() function
                         return docker_socket.read(1024)
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         logger.debug("Docker socket read error/EOF: %s", e)
                         return b""
                         
@@ -90,7 +90,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                 # Decode bytes to text (replace invalid chars to prevent errors)
                 text = data.decode("utf-8", errors="replace")
                 await websocket.send_text(text)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("Error in docker_to_ws loop: %s", e)
         finally:
             closed = True
@@ -130,7 +130,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                     
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Error in ws_to_docker loop: %s", e)
         finally:
             closed = True
@@ -145,6 +145,6 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         closed = True
         try:
             docker_socket.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
         logger.info("Terminal session cleaned up")

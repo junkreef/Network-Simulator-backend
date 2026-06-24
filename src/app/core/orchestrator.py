@@ -592,6 +592,6 @@ class Orchestrator:
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to read topology state (deployed=%s): %s", deployed, e)
             return {"nodes": [], "edges": []}
