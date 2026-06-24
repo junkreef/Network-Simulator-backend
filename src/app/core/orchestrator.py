@@ -442,13 +442,14 @@ class Orchestrator:
             static_routes=static_routes
         )
 
-        # Wait for vtysh/daemons to be ready (up to 15 seconds)
-        for i in range(15):
+        # Wait for vtysh/daemons to be ready (up to 30 seconds)
+        for i in range(30):
             res = container.exec_run(["vtysh", "-c", "write"])
             if res.exit_code == 0:
                 break
-            logger.info("Waiting for vtysh to be responsive inside %s... (%s/15)", node_name, i + 1)
+            logger.info("Waiting for vtysh to be responsive inside %s... (%s/30)", node_name, i + 1)
             time.sleep(1)
+        time.sleep(2)
 
         # 3. Apply config using frr-reload.py
         # Write to temporary file in container /etc/frr/frr.conf.new
@@ -683,3 +684,18 @@ class Orchestrator:
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to read topology state (deployed=%s): %s", deployed, e)
             return {"nodes": [], "edges": []}
+
+    def delete_topology_state(self) -> dict:
+        """Delete the saved topology state files from CONFIG_DIR to reset to default."""
+        try:
+            for filename in ["topology_state.json", "topology_deployed_state.json"]:
+                filepath = os.path.join(settings.CONFIG_DIR, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            return {
+                "status": "success",
+                "message": "Topology state reset successfully"
+            }
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Failed to delete topology state: %s", e)
+            raise e
