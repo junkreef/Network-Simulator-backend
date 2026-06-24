@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Handles startup and shutdown lifespan events of the FastAPI application.
-    
+
     Ensures that any running topology is cleanly destroyed on application shutdown.
     """
     # Startup

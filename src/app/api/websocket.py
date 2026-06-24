@@ -39,29 +39,29 @@ def _safe_write(sock, data: bytes):
 @router.websocket("/ws/terminal/{node_name}")
 async def websocket_terminal(websocket: WebSocket, node_name: str):
     """Handles WebSocket connections to proxy terminal I/O for a specific container.
-    
-    Accepts the WebSocket connection, attaches to a bash shell inside the 
-    specified Docker container, and starts concurrent loops to pipe stdout/stderr 
+
+    Accepts the WebSocket connection, attaches to a bash shell inside the
+    specified Docker container, and starts concurrent loops to pipe stdout/stderr
     to the client and write client stdin back to the docker exec socket.
     """
     await websocket.accept()
-    
+
     orchestrator = Orchestrator()
     if not orchestrator.docker_client:
         await websocket.close(code=4001, reason="Docker daemon not available")
         return
-        
+
     container = orchestrator._get_container_by_name(node_name)
     if not container:
         await websocket.close(code=4004, reason=f"Node {node_name} not found")
         return
-        
+
     client = orchestrator.docker_client
-    
+
     try:
         # Determine shell. Since we installed bash in both Dockerfiles, we use /bin/bash.
         shell = "/bin/bash"
-        
+
         exec_inst = client.api.exec_create(
             container.id,
             cmd=[shell],
@@ -70,7 +70,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
             stderr=True,
             tty=True
         )
-        
+
         # exec_start with socket=True returns a SocketIO-like object
         docker_socket = client.api.exec_start(exec_inst["Id"], socket=True)
         print(f"DEBUG: docker_socket type: {type(docker_socket)}, dir: {dir(docker_socket)}")
@@ -94,11 +94,11 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                     except Exception as e:  # pylint: disable=broad-exception-caught
                         logger.debug("Docker socket read error/EOF: %s", e)
                         return b""
-                        
+
                 data = await anyio.to_thread.run_sync(_read)
                 if not data:
                     break
-                
+
                 # Decode bytes to text (replace invalid chars to prevent errors)
                 text = data.decode("utf-8", errors="replace")
                 await websocket.send_text(text)
@@ -115,7 +115,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                 message = await websocket.receive()
                 if message.get("type") == "websocket.disconnect":
                     break
-                
+
                 text_data = message.get("text")
                 if text_data:
                     try:
@@ -135,11 +135,11 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                     except json.JSONDecodeError:
                         # Raw string input (terminal keystrokes)
                         await anyio.to_thread.run_sync(_safe_write, docker_socket, text_data.encode("utf-8"))
-                
+
                 bytes_data = message.get("bytes")
                 if bytes_data:
                     await anyio.to_thread.run_sync(_safe_write, docker_socket, bytes_data)
-                    
+
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
         except Exception as e:  # pylint: disable=broad-exception-caught

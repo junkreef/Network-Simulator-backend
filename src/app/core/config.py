@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "Network Simulator"
     API_V1_STR: str = "/api/v1"
-    
+
     # Base paths
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     CONFIG_DIR: str = os.path.join(BASE_DIR, "configs")

@@ -24,7 +24,7 @@ class OrchestratorError(Exception):
 
 class Orchestrator:
     """Orchestrates network simulation containers using Docker and Containerlab.
-    
+
     Coordinates the creation of topology configurations, synchronization of
     interfaces/VLANs, applying routing configurations (FRR/static), and extracting
     runtime debugging information.
@@ -35,7 +35,7 @@ class Orchestrator:
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Could not connect to Docker daemon: %s", e)
             self.docker_client = None
-            
+
         self.jinja_env = Environment(
             loader=FileSystemLoader(settings.TEMPLATE_DIR),
             trim_blocks=True,
@@ -86,7 +86,7 @@ class Orchestrator:
                     os.chmod(node_config_dir, 0o777)
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
-                
+
                 # Write daemons file
                 daemons_path = os.path.join(node_config_dir, "daemons")
                 if os.path.isdir(daemons_path):
@@ -118,7 +118,7 @@ class Orchestrator:
                     os.chmod(daemons_path, 0o777)
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
-                
+
                 # Write vtysh.conf
                 vtysh_conf_path = os.path.join(node_config_dir, "vtysh.conf")
                 if os.path.isdir(vtysh_conf_path):
@@ -131,7 +131,7 @@ class Orchestrator:
                     os.chmod(vtysh_conf_path, 0o777)
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
- 
+
                 # Write initial empty frr.conf if not exists
                 frr_conf_path = os.path.join(node_config_dir, "frr.conf")
                 if os.path.exists(frr_conf_path) and os.path.isdir(frr_conf_path):
@@ -229,7 +229,7 @@ class Orchestrator:
         try:
             # Run containerlab inspect to get JSON format status
             cmd = ["containerlab", "inspect", "-t", topo_filepath, "--format", "json"]
-            
+
             # Retry loop to account for containerlab/docker startup state sync delays
             data = {}
             for attempt in range(5):
@@ -244,7 +244,7 @@ class Orchestrator:
                         parsed_data = json.loads(stdout[start_idx:])
                     else:
                         parsed_data = json.loads(stdout)
-                    
+
                     if parsed_data and (not expected_name or expected_name in parsed_data):
                         data = parsed_data
                         break
@@ -253,7 +253,7 @@ class Orchestrator:
                         raise e
                 logger.warning("containerlab inspect not ready yet, retrying in 2s... (attempt %s/5)", attempt + 1)
                 time.sleep(2)
-            
+
             topology_name = ""
             nodes_list = []
             if data:
@@ -263,7 +263,7 @@ class Orchestrator:
                 else:
                     topology_name = list(data.keys())[0]
                     nodes_list = data[topology_name]
-            
+
             nodes_status = []
             for node in nodes_list:
                 nodes_status.append({
@@ -272,7 +272,7 @@ class Orchestrator:
                     "state": node.get("state"),
                     "ipv4_address": node.get("ipv4_address")
                 })
-            
+
             return {
                 "topology_name": topology_name,
                 "status": "running" if nodes_status else "stopped",
@@ -369,7 +369,7 @@ class Orchestrator:
                     if res.exit_code != 0:
                         logger.error("Failed to assign IP to %s: %s", if_name, res.output.decode())
                     container.exec_run(["ip", "link", "set", "dev", if_name, "up"])
-            
+
             # Configure default gateway if specified
             gateway = config_data.get("gateway")
             if gateway:
@@ -422,7 +422,7 @@ class Orchestrator:
         # Run frr-reload.py --reload /etc/frr/frr.conf.new
         reload_cmd = ["/usr/lib/frr/frr-reload.py", "--reload", "/etc/frr/frr.conf.new"]
         reload_res = container.exec_run(reload_cmd)
-        
+
         # Cleanup temp file
         container.exec_run(["rm", "-f", "/etc/frr/frr.conf.new"])
 
@@ -542,9 +542,9 @@ class Orchestrator:
         if exec_res.exit_code != 0:
             logger.warning("Could not read ip link in container")
             return
-            
+
         ip_link_output = exec_res.output.decode()
-        
+
         # Simple parser for vlan interfaces (which typically have @parent or are named parent.id)
         # Or we can check if they contain '.' (e.g. eth1.10)
         existing_vlans = []
@@ -569,7 +569,7 @@ class Orchestrator:
             v_name = tv.get("name")
             v_parent = tv.get("parent")
             v_id = tv.get("vlan_id")
-            
+
             if not v_name or not v_parent or v_id is None:
                 continue
 
@@ -580,7 +580,7 @@ class Orchestrator:
                 if res.exit_code != 0:
                     logger.error("Failed to create VLAN interface %s: %s", v_name, res.output.decode())
                     continue
-                    
+
                 up_cmd = ["ip", "link", "set", "dev", v_name, "up"]
                 container.exec_run(up_cmd)
 

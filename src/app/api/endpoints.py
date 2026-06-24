@@ -98,7 +98,7 @@ class RouterConfigureRequest(BaseModel):
 @router.post("/topology/deploy")
 async def deploy_topology(request: TopologyDeployRequest):
     """Deploys a containerlab network topology based on the provided nodes and links.
-    
+
     Renders the topology YAML, spawns the Docker containers, and sets up interfaces.
     """
     orchestrator = Orchestrator()
@@ -134,7 +134,7 @@ async def get_topology_status():
 @router.post("/nodes/{node_name}/configure")
 async def configure_node(node_name: str, request: RouterConfigureRequest):
     """Configures interfaces, routing, and dynamic routing protocols (OSPF/RIP/BGP) on a specific node.
-    
+
     Generates the new configuration (e.g., frr.conf) and applies it dynamically.
     """
     orchestrator = Orchestrator()
@@ -158,7 +158,7 @@ async def get_runtime_info(
             status_code=400,
             detail=f"Invalid type. Must be one of {', '.join(valid_types)}"
         )
-        
+
     orchestrator = Orchestrator()
     try:
         result = orchestrator.get_runtime_info(node_name, info_type)
