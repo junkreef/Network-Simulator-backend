@@ -1,3 +1,9 @@
+"""Orchestrator for managing Docker containers and Containerlab topologies.
+
+Provides setup, deployment, configuration, runtime state query, and destruction
+of virtual network environments.
+"""
+
 import json
 import logging
 import os
@@ -5,8 +11,8 @@ import shutil
 import subprocess
 import time
 
-import docker
 from jinja2 import Environment, FileSystemLoader
+import docker
 
 from app.core.config import settings
 
@@ -17,6 +23,12 @@ class OrchestratorError(Exception):
 
 
 class Orchestrator:
+    """Orchestrates network simulation containers using Docker and Containerlab.
+    
+    Coordinates the creation of topology configurations, synchronization of
+    interfaces/VLANs, applying routing configurations (FRR/static), and extracting
+    runtime debugging information.
+    """
     def __init__(self):
         try:
             self.docker_client = docker.from_env()
@@ -32,7 +44,7 @@ class Orchestrator:
 
     def _run_cmd(self, cmd: list) -> subprocess.CompletedProcess:
         """Run a shell command and return the result."""
-        logger.info(f"Running command: {' '.join(cmd)}")
+        logger.info("Running command: %s", ' '.join(cmd))
         # Check if running under test or docker where sudo might not be needed,
         # but containerlab typically needs sudo. We will prepend sudo if containerlab is called.
         if cmd[0] == "containerlab" and os.getuid() != 0:
@@ -47,10 +59,11 @@ class Orchestrator:
             )
             return result
         except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed with exit code {e.returncode}. Stderr: {e.stderr}")
+            logger.error("Command failed with exit code %s. Stderr: %s", e.returncode, e.stderr)
             raise e
 
     def get_topology_filepath(self) -> str:
+        """Get the absolute filepath of the topology.clab.yml file."""
         return os.path.join(settings.CONFIG_DIR, "topology.clab.yml")
 
     def deploy_topology(self, topology_data: dict) -> dict:
@@ -71,14 +84,14 @@ class Orchestrator:
                 os.makedirs(node_config_dir, exist_ok=True)
                 try:
                     os.chmod(node_config_dir, 0o777)
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
                 
                 # Write daemons file
                 daemons_path = os.path.join(node_config_dir, "daemons")
                 if os.path.isdir(daemons_path):
                     shutil.rmtree(daemons_path)
-                with open(daemons_path, "w") as f:
+                with open(daemons_path, "w", encoding="utf-8") as f:
                     f.write(
                         "zebra=yes\n"
                         "bgpd=yes\n"
@@ -103,33 +116,33 @@ class Orchestrator:
                     os.fsync(f.fileno())
                 try:
                     os.chmod(daemons_path, 0o777)
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
                 
                 # Write vtysh.conf
                 vtysh_conf_path = os.path.join(node_config_dir, "vtysh.conf")
                 if os.path.isdir(vtysh_conf_path):
                     shutil.rmtree(vtysh_conf_path)
-                with open(vtysh_conf_path, "w") as f:
+                with open(vtysh_conf_path, "w", encoding="utf-8") as f:
                     f.write("service integrated-vtysh-config\n")
                     f.flush()
                     os.fsync(f.fileno())
                 try:
                     os.chmod(vtysh_conf_path, 0o777)
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
  
                 # Write initial empty frr.conf if not exists
                 frr_conf_path = os.path.join(node_config_dir, "frr.conf")
                 if os.path.exists(frr_conf_path) and os.path.isdir(frr_conf_path):
                     shutil.rmtree(frr_conf_path)
-                with open(frr_conf_path, "w") as f:
+                with open(frr_conf_path, "w", encoding="utf-8") as f:
                     f.write("log file /var/log/frr/frr.log\n!\n")
                     f.flush()
                     os.fsync(f.fileno())
                 try:
                     os.chmod(frr_conf_path, 0o777)
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
         # 2. Render topology.clab.yml
@@ -142,14 +155,13 @@ class Orchestrator:
         )
 
         topo_filepath = self.get_topology_filepath()
-        with open(topo_filepath, "w") as f:
+        with open(topo_filepath, "w", encoding="utf-8") as f:
             f.write(rendered_yml)
             f.flush()
             os.fsync(f.fileno())
 
         # 3. Execute containerlab deploy
         # We use --reconfigure to ensure everything is rebuilt cleanly
-        import time
         time.sleep(1)
         cmd = ["containerlab", "deploy", "-t", topo_filepath, "--reconfigure"]
         self._run_cmd(cmd)
@@ -184,8 +196,8 @@ class Orchestrator:
             # Remove the topology file as well
             if os.path.exists(topo_filepath):
                 os.remove(topo_filepath)
-        except Exception as e:
-            logger.warning(f"Error during configs cleanup: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("Error during configs cleanup: %s", e)
 
         return {
             "status": "success",
@@ -196,7 +208,7 @@ class Orchestrator:
         """Get the topology status using containerlab inspect."""
         topo_filepath = self.get_topology_filepath()
         if not os.path.exists(topo_filepath):
-            logger.warning(f"Topology file does not exist at {topo_filepath}")
+            logger.warning("Topology file does not exist at %s", topo_filepath)
             return {
                 "topology_name": "",
                 "status": "stopped",
@@ -206,13 +218,13 @@ class Orchestrator:
         # Parse the expected topology name from the configuration file
         expected_name = ""
         try:
-            with open(topo_filepath, "r") as f:
+            with open(topo_filepath, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip().startswith("name:"):
                         expected_name = line.split(":", 1)[1].strip()
                         break
-        except Exception as e:
-            logger.warning(f"Failed to read name from topology file: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("Failed to read name from topology file: %s", e)
 
         try:
             # Run containerlab inspect to get JSON format status
@@ -236,10 +248,10 @@ class Orchestrator:
                     if parsed_data and (not expected_name or expected_name in parsed_data):
                         data = parsed_data
                         break
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     if attempt == 4:
                         raise e
-                logger.warning(f"containerlab inspect not ready yet, retrying in 2s... (attempt {attempt+1}/5)")
+                logger.warning("containerlab inspect not ready yet, retrying in 2s... (attempt %s/5)", attempt + 1)
                 time.sleep(2)
             
             topology_name = ""
@@ -266,8 +278,8 @@ class Orchestrator:
                 "status": "running" if nodes_status else "stopped",
                 "nodes": nodes_status
             }
-        except Exception as e:
-            logger.error(f"Error getting topology status: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Error getting topology status: %s", e)
             return {
                 "topology_name": "",
                 "status": "error",
@@ -281,11 +293,11 @@ class Orchestrator:
         config_data contains: interfaces, vlan_interfaces, routing
         """
         if not self.docker_client:
-            raise Exception("Docker client not initialized")
+            raise OrchestratorError("Docker client not initialized")
 
         container = self._get_container_by_name(node_name)
         if not container:
-            raise Exception(f"Container for node {node_name} not found")
+            raise OrchestratorError(f"Container for node {node_name} not found")
 
         # Determine if it's a router or switch
         image_name = container.image.tags[0] if container.image.tags else ""
