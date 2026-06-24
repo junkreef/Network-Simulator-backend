@@ -1,3 +1,9 @@
+"""WebSocket terminal API proxy endpoints.
+
+Establishes a bidirectional pipe between front-end Xterm.js client
+and running Docker containers via WebSocket.
+"""
+
 import json
 import logging
 import anyio
@@ -32,6 +38,12 @@ def _safe_write(sock, data: bytes):
 
 @router.websocket("/ws/terminal/{node_name}")
 async def websocket_terminal(websocket: WebSocket, node_name: str):
+    """Handles WebSocket connections to proxy terminal I/O for a specific container.
+    
+    Accepts the WebSocket connection, attaches to a bash shell inside the 
+    specified Docker container, and starts concurrent loops to pipe stdout/stderr 
+    to the client and write client stdin back to the docker exec socket.
+    """
     await websocket.accept()
     
     orchestrator = Orchestrator()
