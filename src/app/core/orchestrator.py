@@ -565,3 +565,33 @@ class Orchestrator:
                     
                 up_cmd = ["ip", "link", "set", "dev", v_name, "up"]
                 container.exec_run(up_cmd)
+
+    def save_topology_state(self, state_data: dict, deployed: bool = False) -> dict:
+        """Save the topology UI state (nodes, edges) to a JSON file."""
+        filename = "topology_deployed_state.json" if deployed else "topology_state.json"
+        filepath = os.path.join(settings.CONFIG_DIR, filename)
+        try:
+            with open(filepath, "w") as f:
+                json.dump(state_data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            return {
+                "status": "success",
+                "message": f"Topology state {'deployed' if deployed else 'saved'} successfully"
+            }
+        except Exception as e:
+            logger.error(f"Failed to save topology state (deployed={deployed}): {e}")
+            raise e
+
+    def get_topology_state(self, deployed: bool = False) -> dict:
+        """Get the topology UI state (nodes, edges) from a JSON file."""
+        filename = "topology_deployed_state.json" if deployed else "topology_state.json"
+        filepath = os.path.join(settings.CONFIG_DIR, filename)
+        if not os.path.exists(filepath):
+            return {"nodes": [], "edges": []}
+        try:
+            with open(filepath, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read topology state (deployed={deployed}): {e}")
+            return {"nodes": [], "edges": []}

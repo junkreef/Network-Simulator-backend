@@ -170,3 +170,34 @@ def test_configure_node_api_bgp_and_gateway(mock_orch_class, client: TestClient)
     }
     mock_orch.configure_node.assert_called_once_with("r1", expected_payload)
 
+@mock.patch("app.api.endpoints.Orchestrator")
+def test_get_topology_state_api(mock_orch_class, client: TestClient):
+    mock_orch = mock_orch_class.return_value
+    mock_orch.get_topology_state.return_value = {
+        "nodes": [{"id": "node-1", "type": "router"}],
+        "edges": []
+    }
+    
+    response = client.get("/api/v1/topology/state?deployed=true")
+    assert response.status_code == 200
+    assert response.json()["nodes"][0]["id"] == "node-1"
+    mock_orch.get_topology_state.assert_called_once_with(deployed=True)
+
+@mock.patch("app.api.endpoints.Orchestrator")
+def test_save_topology_state_api(mock_orch_class, client: TestClient):
+    mock_orch = mock_orch_class.return_value
+    mock_orch.save_topology_state.return_value = {
+        "status": "success",
+        "message": "Topology state saved successfully"
+    }
+    
+    payload = {
+        "nodes": [{"id": "node-1", "type": "router"}],
+        "edges": []
+    }
+    
+    response = client.post("/api/v1/topology/state?deployed=false", json=payload)
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_orch.save_topology_state.assert_called_once_with(payload, deployed=False)
+

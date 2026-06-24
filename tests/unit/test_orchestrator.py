@@ -188,4 +188,36 @@ def test_configure_node_rendering_rip(mock_get_container, tmp_path, monkeypatch)
     assert "router rip" in written_content
     assert "network 10.0.0.0/24" in written_content
 
+def test_save_and_get_topology_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    orch = Orchestrator()
+    state_data = {
+        "nodes": [{"id": "node-1", "type": "router"}],
+        "edges": []
+    }
+    
+    # Save standard state
+    save_res = orch.save_topology_state(state_data, deployed=False)
+    assert save_res["status"] == "success"
+    assert os.path.exists(os.path.join(tmp_path, "topology_state.json"))
+    
+    # Get standard state
+    get_res = orch.get_topology_state(deployed=False)
+    assert get_res == state_data
+    
+    # Save deployed state
+    save_dep_res = orch.save_topology_state(state_data, deployed=True)
+    assert save_dep_res["status"] == "success"
+    assert os.path.exists(os.path.join(tmp_path, "topology_deployed_state.json"))
+    
+    # Get deployed state
+    get_dep_res = orch.get_topology_state(deployed=True)
+    assert get_dep_res == state_data
+
+def test_get_topology_state_not_found(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    orch = Orchestrator()
+    res = orch.get_topology_state(deployed=False)
+    assert res == {"nodes": [], "edges": []}
+
 

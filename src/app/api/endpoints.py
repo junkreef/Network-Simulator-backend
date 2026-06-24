@@ -135,3 +135,21 @@ async def get_runtime_info(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get runtime info for {node_name}: {str(e)}")
+
+@router.get("/topology/state")
+async def get_topology_state(deployed: bool = Query(False, description="Whether to get the deployed state")):
+    orchestrator = Orchestrator()
+    try:
+        result = orchestrator.get_topology_state(deployed=deployed)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get topology state: {str(e)}")
+
+@router.post("/topology/state")
+async def save_topology_state(request: Dict[str, Any], deployed: bool = Query(False, description="Whether to save as deployed state")):
+    orchestrator = Orchestrator()
+    try:
+        result = orchestrator.save_topology_state(request, deployed=deployed)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save topology state: {str(e)}")
