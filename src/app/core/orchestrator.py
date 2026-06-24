@@ -322,7 +322,9 @@ class Orchestrator:
                     continue
 
                 # Add physical interface to bridge and bring it up
-                res_bind = container.exec_run(["ip", "link", "set", "dev", if_name, "master", "br0"])
+                res_bind = container.exec_run(
+                    ["ip", "link", "set", "dev", if_name, "master", "br0"]
+                )
                 if res_bind.exit_code != 0:
                     logger.warning(
                         "Interface %s cannot be added to bridge, skipping: %s",
@@ -658,6 +660,22 @@ class Orchestrator:
         filename = "topology_deployed_state.json" if deployed else "topology_state.json"
         filepath = os.path.join(settings.CONFIG_DIR, filename)
         if not os.path.exists(filepath):
+            if not deployed:
+                default_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "default_topology.json"
+                )
+                if os.path.exists(default_path):
+                    try:
+                        with open(default_path, "r", encoding="utf-8") as f:
+                            default_data = json.load(f)
+                        os.makedirs(settings.CONFIG_DIR, exist_ok=True)
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            json.dump(default_data, f, indent=2, ensure_ascii=False)
+                            f.flush()
+                            os.fsync(f.fileno())
+                        return default_data
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        logger.error("Failed to copy default topology state: %s", e)
             return {"nodes": [], "edges": []}
         try:
             with open(filepath, "r", encoding="utf-8") as f:
