@@ -51,7 +51,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         await websocket.close(code=4001, reason="Docker daemon not available")
         return
 
-    container = orchestrator._get_container_by_name(node_name)
+    container = orchestrator._get_container_by_name(node_name)  # pylint: disable=protected-access
     if not container:
         await websocket.close(code=4004, reason=f"Node {node_name} not found")
         return
