@@ -63,11 +63,16 @@ class RoutingConfig(BaseModel):
     rip: Optional[RipConfig] = None
     bgp: Optional[BgpConfig] = None
 
+class StaticRouteConfig(BaseModel):
+    destination: str
+    next_hop: str
+
 class RouterConfigureRequest(BaseModel):
     interfaces: List[InterfaceConfig] = []
     vlan_interfaces: List[VlanInterfaceConfig] = []
     routing: Optional[RoutingConfig] = None
     gateway: Optional[str] = None
+    static_routes: List[StaticRouteConfig] = []
 
 # --- Endpoints ---
 
@@ -77,6 +82,7 @@ async def deploy_topology(request: TopologyDeployRequest):
     try:
         # Pydantic model to dict for internal usage
         data = request.model_dump()
+        print(f"DEBUG DEPLOY TOPOLOGY PAYLOAD: {data}")
         result = orchestrator.deploy_topology(data)
         return result
     except Exception as e:
@@ -105,6 +111,7 @@ async def configure_node(node_name: str, request: RouterConfigureRequest):
     orchestrator = Orchestrator()
     try:
         data = request.model_dump()
+        print(f"DEBUG CONFIGURE NODE {node_name} PAYLOAD: {data}")
         result = orchestrator.configure_node(node_name, data)
         return result
     except Exception as e:

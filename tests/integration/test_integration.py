@@ -52,6 +52,10 @@ def test_full_integration_flow(client: TestClient):
                     "areas": [
                         {"area_id": "0", "networks": ["10.0.0.0/24"]}
                     ]
+                },
+                "rip": {
+                    "enabled": True,
+                    "networks": ["10.0.0.0/24"]
                 }
             }
         }
@@ -94,6 +98,11 @@ def test_full_integration_flow(client: TestClient):
         info_res = client.get("/api/v1/nodes/r1/runtime-info?type=routing_table")
         assert info_res.status_code == 200
         assert "10.0.0.0/24" in info_res.json()["raw_output"]
+
+        # RIP status check
+        info_res = client.get("/api/v1/nodes/r1/runtime-info?type=rip_status")
+        assert info_res.status_code == 200
+        print("DEBUG RIP STATUS OUTPUT:", info_res.json()["raw_output"])
 
         info_res = client.get("/api/v1/nodes/r1/runtime-info?type=arp_table")
         assert info_res.status_code == 200

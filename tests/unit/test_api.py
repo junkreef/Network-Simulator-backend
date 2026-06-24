@@ -91,7 +91,9 @@ def test_configure_node_api(mock_orch_class, client: TestClient):
             },
             "rip": None,
             "bgp": None
-        }
+        },
+        "gateway": None,
+        "static_routes": []
     }
     mock_orch.configure_node.assert_called_once_with("r1", expected_payload)
 
@@ -112,3 +114,59 @@ def test_get_runtime_info_api(mock_orch_class, client: TestClient):
 def test_get_runtime_info_invalid_type(client: TestClient):
     response = client.get("/api/v1/nodes/r1/runtime-info?type=invalid_type")
     assert response.status_code == 400
+
+
+@mock.patch("app.api.endpoints.Orchestrator")
+def test_configure_node_api_bgp_and_gateway(mock_orch_class, client: TestClient):
+    mock_orch = mock_orch_class.return_value
+    mock_orch.configure_node.return_value = {
+        "status": "success",
+        "output": "Configuration applied successfully"
+    }
+
+    payload = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24"}
+        ],
+        "vlan_interfaces": [],
+        "routing": {
+            "bgp": {
+                "enabled": True,
+                "as_number": 65001,
+                "router_id": "1.1.1.1",
+                "neighbors": [
+                    {"ip_address": "10.0.0.2", "remote_as": 65002}
+                ]
+            },
+            "ospf": None,
+            "rip": None
+        },
+        "gateway": "10.0.0.254"
+    }
+
+    response = client.post("/api/v1/nodes/r1/configure", json=payload)
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    
+    expected_payload = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24", "vlan_mode": None, "vlan_id": None, "vlan_ids": None}
+        ],
+        "vlan_interfaces": [],
+        "routing": {
+            "bgp": {
+                "enabled": True,
+                "as_number": 65001,
+                "router_id": "1.1.1.1",
+                "neighbors": [
+                    {"ip_address": "10.0.0.2", "remote_as": 65002}
+                ]
+            },
+            "ospf": None,
+            "rip": None
+        },
+        "gateway": "10.0.0.254",
+        "static_routes": []
+    }
+    mock_orch.configure_node.assert_called_once_with("r1", expected_payload)
+

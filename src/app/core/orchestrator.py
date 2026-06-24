@@ -365,12 +365,25 @@ class Orchestrator:
                 "output": "Terminal interfaces and routing configured successfully"
             }
 
+        # Convert gateway to default static route if router
+        static_routes = config_data.get("static_routes", [])
+        gateway = config_data.get("gateway")
+        if gateway:
+            # Handle possible Pydantic model conversion inside list
+            static_routes = [
+                dict(r) if not isinstance(r, dict) else r for r in static_routes
+            ]
+            if not any(r.get("destination") == "0.0.0.0/0" or r.get("destination") == "0.0.0.0" for r in static_routes):
+                static_routes = list(static_routes)
+                static_routes.append({"destination": "0.0.0.0/0", "next_hop": gateway})
+
         # 2. Render frr.conf for router
         template = self.jinja_env.get_template("frr.conf.j2")
         rendered_conf = template.render(
             interfaces=config_data.get("interfaces", []),
             vlan_interfaces=vlan_interfaces,
-            routing=config_data.get("routing", {})
+            routing=config_data.get("routing", {}),
+            static_routes=static_routes
         )
 
         # Wait for vtysh/daemons to be ready (up to 15 seconds)

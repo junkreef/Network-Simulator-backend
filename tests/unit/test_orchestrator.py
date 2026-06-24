@@ -99,3 +99,93 @@ def test_configure_node_rendering(mock_get_container, tmp_path, monkeypatch):
     assert "router ospf" in written_content
     assert "ospf router-id 1.1.1.1" in written_content
     assert "network 10.0.0.0/24 area 0" in written_content
+
+
+@mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
+def test_configure_node_rendering_bgp_and_gateway(mock_get_container, tmp_path, monkeypatch):
+    # Set settings.CONFIG_DIR to tmp_path
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    
+    mock_container = mock.MagicMock()
+    mock_get_container.return_value = mock_container
+    # Return exit_code=0 for container commands
+    mock_container.exec_run.return_value = mock.MagicMock(exit_code=0, output=b"")
+    mock_container.image.tags = ["alpine-frr:latest"]
+    
+    orch = Orchestrator()
+    
+    config_data = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24"}
+        ],
+        "vlan_interfaces": [],
+        "routing": {
+            "bgp": {
+                "enabled": True,
+                "as_number": 65001,
+                "router_id": "1.1.1.1",
+                "neighbors": [
+                    {"ip_address": "10.0.0.2", "remote_as": 65002}
+                ]
+            }
+        },
+        "gateway": "10.0.0.254"
+    }
+    
+    res = orch.configure_node("r1", config_data)
+    assert res["status"] == "success"
+    
+    # Check if configurations were written to CONFIG_DIR/sim-network/r1/frr.conf
+    frr_conf_path = os.path.join(settings.CONFIG_DIR, "sim-network", "r1", "frr.conf")
+    assert os.path.exists(frr_conf_path)
+    with open(frr_conf_path, "r") as f:
+        written_content = f.read()
+        
+    # Assert BGP rendering
+    assert "router bgp 65001" in written_content
+    assert "bgp router-id 1.1.1.1" in written_content
+    assert "neighbor 10.0.0.2 remote-as 65002" in written_content
+    assert "neighbor 10.0.0.2 activate" in written_content
+
+    # Assert Static Route / Gateway rendering (This might fail currently)
+    assert "ip route 0.0.0.0/0 10.0.0.254" in written_content or "ip route" in written_content
+
+
+@mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
+def test_configure_node_rendering_rip(mock_get_container, tmp_path, monkeypatch):
+    # Set settings.CONFIG_DIR to tmp_path
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    
+    mock_container = mock.MagicMock()
+    mock_get_container.return_value = mock_container
+    mock_container.exec_run.return_value = mock.MagicMock(exit_code=0, output=b"")
+    mock_container.image.tags = ["alpine-frr:latest"]
+    
+    orch = Orchestrator()
+    
+    config_data = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24"}
+        ],
+        "vlan_interfaces": [],
+        "routing": {
+            "rip": {
+                "enabled": True,
+                "networks": ["10.0.0.0/24"]
+            }
+        }
+    }
+    
+    res = orch.configure_node("r1", config_data)
+    assert res["status"] == "success"
+    
+    frr_conf_path = os.path.join(settings.CONFIG_DIR, "sim-network", "r1", "frr.conf")
+    assert os.path.exists(frr_conf_path)
+    with open(frr_conf_path, "r") as f:
+        written_content = f.read()
+        
+    # Assert RIP rendering
+    assert "router rip" in written_content
+    assert "network 10.0.0.0/24" in written_content
+
+

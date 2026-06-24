@@ -45,3 +45,7 @@ router bgp {{ routing.bgp.as_number }}
   {% endfor %}
 !
 {% endif %}
+!
+{% for route in static_routes %}
+ip route {{ route.destination }} {{ route.next_hop }}
+{% endfor %}
