@@ -217,7 +217,15 @@ def test_save_and_get_topology_state(tmp_path, monkeypatch):
 def test_get_topology_state_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
     orch = Orchestrator()
+    
+    # Non-deployed state should return default topology and copy it to CONFIG_DIR
     res = orch.get_topology_state(deployed=False)
-    assert res == {"nodes": [], "edges": []}
+    assert len(res.get("nodes", [])) == 3
+    assert len(res.get("edges", [])) == 1
+    assert os.path.exists(os.path.join(tmp_path, "topology_state.json"))
+    
+    # Deployed state should return empty topology if not found
+    res_dep = orch.get_topology_state(deployed=True)
+    assert res_dep == {"nodes": [], "edges": []}
 
 
