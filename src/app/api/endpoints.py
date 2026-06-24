@@ -145,7 +145,8 @@ async def get_topology_status():
 
 @router.post("/nodes/{node_name}/configure")
 async def configure_node(node_name: str, request: RouterConfigureRequest):
-    """Configures interfaces, routing, and dynamic routing protocols (OSPF/RIP/BGP) on a specific node.
+    """Configures interfaces, routing, and dynamic routing protocols (OSPF/RIP/BGP)
+    on a specific node.
 
     Generates the new configuration (e.g., frr.conf) and applies it dynamically.
     """
@@ -191,7 +192,9 @@ async def get_runtime_info(
         ) from e
 
 @router.get("/topology/state")
-async def get_topology_state(deployed: bool = Query(False, description="Whether to get the deployed state")):
+async def get_topology_state(
+    deployed: bool = Query(False, description="Whether to get the deployed state")
+):
     """Retrieves the saved frontend UI topology state (nodes and edges layout)."""
     orchestrator = Orchestrator()
     try:
