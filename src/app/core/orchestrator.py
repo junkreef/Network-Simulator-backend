@@ -418,7 +418,7 @@ class Orchestrator:
         topo_filepath = self.get_topology_filepath()
         if os.path.exists(topo_filepath):
             try:
-                with open(topo_filepath, "r") as f:
+                with open(topo_filepath, "r", encoding="utf-8") as f:
                     for line in f:
                         if line.strip().startswith("name:"):
                             topo_name = line.split(":", 1)[1].strip()
@@ -427,7 +427,7 @@ class Orchestrator:
                 pass
         node_config_path = os.path.join(settings.CONFIG_DIR, topo_name, node_name, "frr.conf")
         os.makedirs(os.path.dirname(node_config_path), exist_ok=True)
-        with open(node_config_path, "w") as f:
+        with open(node_config_path, "w", encoding="utf-8") as f:
             f.write(rendered_conf)
         try:
             os.chmod(node_config_path, 0o777)
@@ -496,7 +496,7 @@ class Orchestrator:
         topo_filepath = self.get_topology_filepath()
         if os.path.exists(topo_filepath):
             try:
-                with open(topo_filepath, "r") as f:
+                with open(topo_filepath, "r", encoding="utf-8") as f:
                     for line in f:
                         if line.strip().startswith("name:"):
                             topo_name = line.split(":", 1)[1].strip()
