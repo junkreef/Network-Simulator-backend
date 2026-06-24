@@ -128,13 +128,19 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                             client.api.exec_resize(exec_id, height=rows, width=cols)
                         elif event == "input":
                             input_data = data_json.get("data", "")
-                            await anyio.to_thread.run_sync(_safe_write, docker_socket, input_data.encode("utf-8"))
+                            await anyio.to_thread.run_sync(
+                                _safe_write, docker_socket, input_data.encode("utf-8")
+                            )
                         else:
                             # Other JSON, write raw
-                            await anyio.to_thread.run_sync(_safe_write, docker_socket, text_data.encode("utf-8"))
+                            await anyio.to_thread.run_sync(
+                                _safe_write, docker_socket, text_data.encode("utf-8")
+                            )
                     except json.JSONDecodeError:
                         # Raw string input (terminal keystrokes)
-                        await anyio.to_thread.run_sync(_safe_write, docker_socket, text_data.encode("utf-8"))
+                        await anyio.to_thread.run_sync(
+                            _safe_write, docker_socket, text_data.encode("utf-8")
+                        )
 
                 bytes_data = message.get("bytes")
                 if bytes_data:
