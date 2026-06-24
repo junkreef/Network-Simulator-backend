@@ -14,7 +14,8 @@ class Settings(BaseSettings):
 
     # Base paths
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    CONFIG_DIR: str = os.path.join(BASE_DIR, "configs")
+    PROJECT_ROOT: str = os.path.dirname(os.path.dirname(BASE_DIR))
+    CONFIG_DIR: str = os.path.join(PROJECT_ROOT, "data")
     TEMPLATE_DIR: str = os.path.join(BASE_DIR, "templates")
 
     class Config:

@@ -40,4 +40,4 @@ Thumbs.db
 .idea/
 
 # Containerlab and runtime configs
-src/app/configs/
+data/
