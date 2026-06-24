@@ -86,7 +86,7 @@ async def deploy_topology(request: TopologyDeployRequest):
         result = orchestrator.deploy_topology(data)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to deploy topology: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to deploy topology: {str(e)}") from e
 
 @router.post("/topology/destroy")
 async def destroy_topology():
@@ -95,7 +95,7 @@ async def destroy_topology():
         result = orchestrator.destroy_topology()
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to destroy topology: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to destroy topology: {str(e)}") from e
 
 @router.get("/topology/status")
 async def get_topology_status():
@@ -104,7 +104,7 @@ async def get_topology_status():
         result = orchestrator.get_topology_status()
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get topology status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get topology status: {str(e)}") from e
 
 @router.post("/nodes/{node_name}/configure")
 async def configure_node(node_name: str, request: RouterConfigureRequest):
@@ -115,7 +115,7 @@ async def configure_node(node_name: str, request: RouterConfigureRequest):
         result = orchestrator.configure_node(node_name, data)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to configure node {node_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to configure node {node_name}: {str(e)}") from e
 
 @router.get("/nodes/{node_name}/runtime-info")
 async def get_runtime_info(
@@ -134,7 +134,7 @@ async def get_runtime_info(
         result = orchestrator.get_runtime_info(node_name, type)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get runtime info for {node_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get runtime info for {node_name}: {str(e)}") from e
 
 @router.get("/topology/state")
 async def get_topology_state(deployed: bool = Query(False, description="Whether to get the deployed state")):
@@ -143,7 +143,7 @@ async def get_topology_state(deployed: bool = Query(False, description="Whether 
         result = orchestrator.get_topology_state(deployed=deployed)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get topology state: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get topology state: {str(e)}") from e
 
 @router.post("/topology/state")
 async def save_topology_state(request: Dict[str, Any], deployed: bool = Query(False, description="Whether to save as deployed state")):
@@ -152,4 +152,4 @@ async def save_topology_state(request: Dict[str, Any], deployed: bool = Query(Fa
         result = orchestrator.save_topology_state(request, deployed=deployed)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save topology state: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save topology state: {str(e)}") from e
