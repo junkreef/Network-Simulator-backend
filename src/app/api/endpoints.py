@@ -120,10 +120,10 @@ async def configure_node(node_name: str, request: RouterConfigureRequest):
 @router.get("/nodes/{node_name}/runtime-info")
 async def get_runtime_info(
     node_name: str,
-    type: str = Query(..., description="Type of runtime info to retrieve: routing_table, arp_table, ospf_neighbors, bgp_neighbors, rip_status")
+    info_type: str = Query(..., alias="type", description="Type of runtime info to retrieve: routing_table, arp_table, ospf_neighbors, bgp_neighbors, rip_status")
 ):
     valid_types = ["routing_table", "arp_table", "ospf_neighbors", "bgp_neighbors", "rip_status"]
-    if type not in valid_types:
+    if info_type not in valid_types:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid type. Must be one of {', '.join(valid_types)}"
@@ -131,7 +131,7 @@ async def get_runtime_info(
         
     orchestrator = Orchestrator()
     try:
-        result = orchestrator.get_runtime_info(node_name, type)
+        result = orchestrator.get_runtime_info(node_name, info_type)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get runtime info for {node_name}: {str(e)}") from e
