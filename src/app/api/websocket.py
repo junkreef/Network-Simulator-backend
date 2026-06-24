@@ -27,7 +27,7 @@ def _safe_write(sock, data: bytes):
             if hasattr(sock, "flush"):
                 sock.flush()
     except Exception as e:
-        logger.error(f"Failed to write to docker socket: {e}")
+        logger.error("Failed to write to docker socket: %s", e)
         raise e
 
 @router.websocket("/ws/terminal/{node_name}")
@@ -63,7 +63,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         docker_socket = client.api.exec_start(exec_inst["Id"], socket=True)
         print(f"DEBUG: docker_socket type: {type(docker_socket)}, dir: {dir(docker_socket)}")
     except Exception as e:
-        logger.error(f"Failed to start exec session: {e}")
+        logger.error("Failed to start exec session: %s", e)
         await websocket.close(code=4005, reason=f"Failed to start terminal: {str(e)}")
         return
 
@@ -80,7 +80,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                         # docker-py socket wrapper read() function
                         return docker_socket.read(1024)
                     except Exception as e:
-                        logger.debug(f"Docker socket read error/EOF: {e}")
+                        logger.debug("Docker socket read error/EOF: %s", e)
                         return b""
                         
                 data = await anyio.to_thread.run_sync(_read)
@@ -91,7 +91,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                 text = data.decode("utf-8", errors="replace")
                 await websocket.send_text(text)
         except Exception as e:
-            logger.debug(f"Error in docker_to_ws loop: {e}")
+            logger.debug("Error in docker_to_ws loop: %s", e)
         finally:
             closed = True
             logger.info("Docker to WS loop finished")
@@ -131,7 +131,7 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
         except Exception as e:
-            logger.error(f"Error in ws_to_docker loop: {e}")
+            logger.error("Error in ws_to_docker loop: %s", e)
         finally:
             closed = True
             logger.info("WS to Docker loop finished")

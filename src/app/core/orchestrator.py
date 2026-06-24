@@ -580,7 +580,7 @@ class Orchestrator:
                 "message": f"Topology state {'deployed' if deployed else 'saved'} successfully"
             }
         except Exception as e:
-            logger.error(f"Failed to save topology state (deployed={deployed}): {e}")
+            logger.error("Failed to save topology state (deployed=%s): %s", deployed, e)
             raise e
 
     def get_topology_state(self, deployed: bool = False) -> dict:
@@ -593,5 +593,5 @@ class Orchestrator:
             with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(f"Failed to read topology state (deployed={deployed}): {e}")
+            logger.error("Failed to read topology state (deployed=%s): %s", deployed, e)
             return {"nodes": [], "edges": []}
