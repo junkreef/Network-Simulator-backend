@@ -251,7 +251,10 @@ class Orchestrator:
                 except Exception as e:  # pylint: disable=broad-exception-caught
                     if attempt == 4:
                         raise e
-                logger.warning("containerlab inspect not ready yet, retrying in 2s... (attempt %s/5)", attempt + 1)
+                logger.warning(
+                    "containerlab inspect not ready yet, retrying in 2s... (attempt %s/5)",
+                    attempt + 1
+                )
                 time.sleep(2)
 
             topology_name = ""
@@ -306,7 +309,10 @@ class Orchestrator:
 
         if is_switch:
             # Create br0 with vlan_filtering=1, forward_delay=0, stp=0 and bring it up
-            container.exec_run(["ip", "link", "add", "name", "br0", "type", "bridge", "vlan_filtering", "1", "forward_delay", "0", "stp_state", "0"])
+            container.exec_run([
+                "ip", "link", "add", "name", "br0", "type", "bridge",
+                "vlan_filtering", "1", "forward_delay", "0", "stp_state", "0"
+            ])
             container.exec_run(["ip", "link", "set", "dev", "br0", "up"])
 
             interfaces = config_data.get("interfaces", [])
@@ -327,15 +333,26 @@ class Orchestrator:
                 if vlan_mode == "access":
                     vlan_id = iface.get("vlan_id")
                     if vlan_id is not None:
-                        res = container.exec_run(["bridge", "vlan", "add", "dev", if_name, "vid", str(vlan_id), "pvid", "untagged"])
+                        res = container.exec_run([
+                            "bridge", "vlan", "add", "dev", if_name,
+                            "vid", str(vlan_id), "pvid", "untagged"
+                        ])
                         if res.exit_code != 0:
-                            logger.error("Failed to configure access vlan %s on %s: %s", vlan_id, if_name, res.output.decode())
+                            logger.error(
+                                "Failed to configure access vlan %s on %s: %s",
+                                vlan_id, if_name, res.output.decode()
+                            )
                 elif vlan_mode == "trunk":
                     vlan_ids = iface.get("vlan_ids", [])
                     for vid in vlan_ids:
-                        res = container.exec_run(["bridge", "vlan", "add", "dev", if_name, "vid", str(vid)])
+                        res = container.exec_run([
+                            "bridge", "vlan", "add", "dev", if_name, "vid", str(vid)
+                        ])
                         if res.exit_code != 0:
-                            logger.error("Failed to configure trunk vlan %s on %s: %s", vid, if_name, res.output.decode())
+                            logger.error(
+                                "Failed to configure trunk vlan %s on %s: %s",
+                                vid, if_name, res.output.decode()
+                            )
 
             return {
                 "status": "success",
@@ -348,14 +365,18 @@ class Orchestrator:
 
         # Apply IP addresses on VLAN interfaces for both router (kernel side) and terminal
         for viface in vlan_interfaces:
-            v_name = viface.get("name")
-            v_ip = viface.get("ip_address")
-            if v_name and v_ip:
-                # Add IP address directly to Linux kernel (needed for terminal, FRR routers will sync via frr.conf but doing it directly doesn't hurt)
+            if viface.get("ip_address") and viface.get("name"):
+                v_name = viface.get("name")
+                v_ip = viface.get("ip_address")
+                # Add IP address directly to Linux kernel (needed for terminal, FRR
+                # routers will sync via frr.conf but doing it directly doesn't hurt)
                 container.exec_run(["ip", "addr", "flush", "dev", v_name])
                 res = container.exec_run(["ip", "addr", "add", v_ip, "dev", v_name])
                 if res.exit_code != 0:
-                    logger.warning("Direct IP assignment failed for %s: %s", v_name, res.output.decode())
+                    logger.warning(
+                        "Direct IP assignment failed for %s: %s",
+                        v_name, res.output.decode()
+                    )
 
         if not is_router:
             # For terminal/non-router nodes, directly configure physical interfaces
@@ -367,7 +388,10 @@ class Orchestrator:
                     container.exec_run(["ip", "addr", "flush", "dev", if_name])
                     res = container.exec_run(["ip", "addr", "add", if_ip, "dev", if_name])
                     if res.exit_code != 0:
-                        logger.error("Failed to assign IP to %s: %s", if_name, res.output.decode())
+                        logger.error(
+                            "Failed to assign IP to %s: %s",
+                            if_name, res.output.decode()
+                        )
                     container.exec_run(["ip", "link", "set", "dev", if_name, "up"])
 
             # Configure default gateway if specified
@@ -376,7 +400,10 @@ class Orchestrator:
                 container.exec_run(["ip", "route", "del", "default"])
                 res = container.exec_run(["ip", "route", "add", "default", "via", gateway])
                 if res.exit_code != 0:
-                    logger.error("Failed to configure default gateway %s: %s", gateway, res.output.decode())
+                    logger.error(
+                        "Failed to configure default gateway %s: %s",
+                        gateway, res.output.decode()
+                    )
 
             return {
                 "status": "success",
@@ -391,7 +418,10 @@ class Orchestrator:
             static_routes = [
                 dict(r) if not isinstance(r, dict) else r for r in static_routes
             ]
-            if not any(r.get("destination") == "0.0.0.0/0" or r.get("destination") == "0.0.0.0" for r in static_routes):
+            if not any(
+                r.get("destination") in ("0.0.0.0/0", "0.0.0.0")
+                for r in static_routes
+            ):
                 static_routes = list(static_routes)
                 static_routes.append({"destination": "0.0.0.0/0", "next_hop": gateway})
 
@@ -417,7 +447,9 @@ class Orchestrator:
         write_cmd = f"cat << 'EOF' > /etc/frr/frr.conf.new\n{rendered_conf}\nEOF"
         exec_res = container.exec_run(["sh", "-c", write_cmd])
         if exec_res.exit_code != 0:
-            raise OrchestratorError(f"Failed to write frr.conf.new in container: {exec_res.output.decode()}")
+            raise OrchestratorError(
+                f"Failed to write frr.conf.new in container: {exec_res.output.decode()}"
+            )
 
         # Run frr-reload.py --reload /etc/frr/frr.conf.new
         reload_cmd = ["/usr/lib/frr/frr-reload.py", "--reload", "/etc/frr/frr.conf.new"]
@@ -454,7 +486,10 @@ class Orchestrator:
 
         return {
             "status": "success",
-            "output": reload_res.output.decode() or "Configuration applied successfully via frr-reload.py"
+            "output": (
+                reload_res.output.decode()
+                or "Configuration applied successfully via frr-reload.py"
+            )
         }
 
 
@@ -500,7 +535,9 @@ class Orchestrator:
 
         exec_res = container.exec_run(cmd)
         if exec_res.exit_code != 0:
-            raise OrchestratorError(f"Failed to execute command {' '.join(cmd)}: {exec_res.output.decode()}")
+            raise OrchestratorError(
+                f"Failed to execute command {' '.join(cmd)}: {exec_res.output.decode()}"
+            )
 
         return {
             "node_name": node_name,
@@ -509,7 +546,10 @@ class Orchestrator:
         }
 
     def _get_container_by_name(self, node_name: str):
-        """Find a docker container by its short name (e.g. 'r1') or containerlab full name (e.g. 'clab-sim-network-r1')."""
+        """Find a docker container by its short name or containerlab full name.
+
+        Example full name: 'clab-sim-network-r1'.
+        """
         topo_name = ""
         topo_filepath = self.get_topology_filepath()
         if os.path.exists(topo_filepath):
@@ -575,10 +615,16 @@ class Orchestrator:
 
             if v_name not in existing_vlans:
                 # Add VLAN interface
-                add_cmd = ["ip", "link", "add", "link", v_parent, "name", v_name, "type", "vlan", "id", str(v_id)]
+                add_cmd = [
+                    "ip", "link", "add", "link", v_parent, "name", v_name,
+                    "type", "vlan", "id", str(v_id)
+                ]
                 res = container.exec_run(add_cmd)
                 if res.exit_code != 0:
-                    logger.error("Failed to create VLAN interface %s: %s", v_name, res.output.decode())
+                    logger.error(
+                        "Failed to create VLAN interface %s: %s",
+                        v_name, res.output.decode()
+                    )
                     continue
 
                 up_cmd = ["ip", "link", "set", "dev", v_name, "up"]
