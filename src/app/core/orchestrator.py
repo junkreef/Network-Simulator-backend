@@ -571,7 +571,7 @@ class Orchestrator:
         filename = "topology_deployed_state.json" if deployed else "topology_state.json"
         filepath = os.path.join(settings.CONFIG_DIR, filename)
         try:
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(state_data, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
@@ -590,7 +590,7 @@ class Orchestrator:
         if not os.path.exists(filepath):
             return {"nodes": [], "edges": []}
         try:
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to read topology state (deployed={deployed}): {e}")
