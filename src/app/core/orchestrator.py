@@ -10,12 +10,16 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+class OrchestratorError(Exception):
+    """Base exception class for Orchestrator errors."""
+
+
 class Orchestrator:
     def __init__(self):
         try:
             self.docker_client = docker.from_env()
-        except Exception as e:
-            logger.warning(f"Could not connect to Docker daemon: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("Could not connect to Docker daemon: %s", e)
             self.docker_client = None
             
         self.jinja_env = Environment(
@@ -399,7 +403,7 @@ class Orchestrator:
         write_cmd = f"cat << 'EOF' > /etc/frr/frr.conf.new\n{rendered_conf}\nEOF"
         exec_res = container.exec_run(["sh", "-c", write_cmd])
         if exec_res.exit_code != 0:
-            raise Exception(f"Failed to write frr.conf.new in container: {exec_res.output.decode()}")
+            raise OrchestratorError(f"Failed to write frr.conf.new in container: {exec_res.output.decode()}")
 
         # Run frr-reload.py --reload /etc/frr/frr.conf.new
         reload_cmd = ["/usr/lib/frr/frr-reload.py", "--reload", "/etc/frr/frr.conf.new"]
@@ -410,8 +414,8 @@ class Orchestrator:
 
         if reload_res.exit_code != 0:
             error_output = reload_res.output.decode()
-            logger.error(f"frr-reload.py failed: {error_output}")
-            raise Exception(f"Configuration reload failed: {error_output}")
+            logger.error("frr-reload.py failed: %s", error_output)
+            raise OrchestratorError(f"Configuration reload failed: {error_output}")
 
         # If success, update host config file for persistent configuration (mounted as rw)
         topo_name = "sim-network"
@@ -423,7 +427,7 @@ class Orchestrator:
                         if line.strip().startswith("name:"):
                             topo_name = line.split(":", 1)[1].strip()
                             break
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
         node_config_path = os.path.join(settings.CONFIG_DIR, topo_name, node_name, "frr.conf")
         os.makedirs(os.path.dirname(node_config_path), exist_ok=True)
@@ -431,7 +435,7 @@ class Orchestrator:
             f.write(rendered_conf)
         try:
             os.chmod(node_config_path, 0o777)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
         return {
@@ -443,11 +447,11 @@ class Orchestrator:
     def get_runtime_info(self, node_name: str, info_type: str) -> dict:
         """Get runtime routing / ARP / neighbor information for a node."""
         if not self.docker_client:
-            raise Exception("Docker client not initialized")
+            raise OrchestratorError("Docker client not initialized")
 
         container = self._get_container_by_name(node_name)
         if not container:
-            raise Exception(f"Container for node {node_name} not found")
+            raise OrchestratorError(f"Container for node {node_name} not found")
 
         # Determine node type (router vs terminal) by checking image or command output
         # Let's inspect container image name
@@ -466,23 +470,23 @@ class Orchestrator:
             if is_router:
                 cmd = ["vtysh", "-c", "show ip ospf neighbor"]
             else:
-                raise Exception("OSPF neighbors only available on routers")
+                raise OrchestratorError("OSPF neighbors only available on routers")
         elif info_type == "bgp_neighbors":
             if is_router:
                 cmd = ["vtysh", "-c", "show ip bgp summary"]
             else:
-                raise Exception("BGP neighbors only available on routers")
+                raise OrchestratorError("BGP neighbors only available on routers")
         elif info_type == "rip_status":
             if is_router:
                 cmd = ["vtysh", "-c", "show ip rip"]
             else:
-                raise Exception("RIP status only available on routers")
+                raise OrchestratorError("RIP status only available on routers")
         else:
-            raise Exception(f"Unknown info type: {info_type}")
+            raise OrchestratorError(f"Unknown info type: {info_type}")
 
         exec_res = container.exec_run(cmd)
         if exec_res.exit_code != 0:
-            raise Exception(f"Failed to execute command {' '.join(cmd)}: {exec_res.output.decode()}")
+            raise OrchestratorError(f"Failed to execute command {' '.join(cmd)}: {exec_res.output.decode()}")
 
         return {
             "node_name": node_name,
@@ -501,7 +505,7 @@ class Orchestrator:
                         if line.strip().startswith("name:"):
                             topo_name = line.split(":", 1)[1].strip()
                             break
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
         containers = self.docker_client.containers.list()
