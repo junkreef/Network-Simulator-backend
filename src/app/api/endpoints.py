@@ -219,3 +219,15 @@ async def save_topology_state(
         raise HTTPException(
             status_code=500, detail=f"Failed to save topology state: {str(e)}"
         ) from e
+
+@router.delete("/topology/state")
+async def delete_topology_state():
+    """Resets the topology state by deleting saved files from CONFIG_DIR."""
+    orchestrator = Orchestrator()
+    try:
+        result = orchestrator.delete_topology_state()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to reset topology state: {str(e)}"
+        ) from e

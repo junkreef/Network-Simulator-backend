@@ -179,9 +179,14 @@ class Orchestrator:
         """Destroy the containerlab topology."""
         topo_filepath = self.get_topology_filepath()
         if not os.path.exists(topo_filepath):
+            try:
+                cmd = ["containerlab", "destroy", "--name", "sim-network", "--cleanup"]
+                self._run_cmd(cmd)
+            except Exception as e:
+                logger.warning("Fallback destroy by name failed: %s", e)
             return {
                 "status": "success",
-                "message": "No topology configuration found to destroy"
+                "message": "No topology configuration found to destroy, performed fallback name-based destroy"
             }
 
         cmd = ["containerlab", "destroy", "-t", topo_filepath, "--cleanup"]
