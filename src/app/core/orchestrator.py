@@ -322,7 +322,13 @@ class Orchestrator:
                     continue
 
                 # Add physical interface to bridge and bring it up
-                container.exec_run(["ip", "link", "set", "dev", if_name, "master", "br0"])
+                res_bind = container.exec_run(["ip", "link", "set", "dev", if_name, "master", "br0"])
+                if res_bind.exit_code != 0:
+                    logger.warning(
+                        "Interface %s cannot be added to bridge, skipping: %s",
+                        if_name, res_bind.output.decode()
+                    )
+                    continue
                 container.exec_run(["ip", "link", "set", "dev", if_name, "up"])
 
                 # Remove default vlan 1
