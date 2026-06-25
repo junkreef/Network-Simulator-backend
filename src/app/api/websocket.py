@@ -4,6 +4,7 @@ Establishes a bidirectional pipe between front-end Xterm.js client
 and running Docker containers via WebSocket.
 """
 
+import asyncio
 import json
 import logging
 import anyio
@@ -13,28 +14,15 @@ from app.core.orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def _safe_write(sock, data: bytes):
-    """Safely write data to docker exec socket by unwrapping socket."""
-    # Unwrap socket if it's a wrapper (like SocketIO or HTTPResponse)
+def _unwrap_socket(sock):
+    """Safely unwrap docker socket to get the underlying raw socket."""
     real_sock = sock
     for attr in ["_sock", "socket", "_socket", "raw"]:
         if hasattr(real_sock, attr):
             val = getattr(real_sock, attr)
             if val is not None:
                 real_sock = val
-
-    try:
-        if hasattr(real_sock, "sendall"):
-            real_sock.sendall(data)
-        elif hasattr(real_sock, "send"):
-            real_sock.send(data)
-        else:
-            sock.write(data)
-            if hasattr(sock, "flush"):
-                sock.flush()
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Failed to write to docker socket: %s", e)
-        raise e
+    return real_sock
 
 @router.websocket("/ws/terminal/{node_name}")
 async def websocket_terminal(websocket: WebSocket, node_name: str):
@@ -71,9 +59,8 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
             tty=True
         )
 
-        # exec_start with socket=True returns a SocketIO-like object
         docker_socket = client.api.exec_start(exec_inst["Id"], socket=True)
-        print(f"DEBUG: docker_socket type: {type(docker_socket)}, dir: {dir(docker_socket)}")
+        real_sock = _unwrap_socket(docker_socket)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Failed to start exec session: %s", e)
         await websocket.close(code=4005, reason=f"Failed to start terminal: {str(e)}")
@@ -86,21 +73,39 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
         nonlocal closed
         try:
             while not closed:
-                def _read():
+                def _read_exactly(n):
                     try:
-                        # read() blocks until data is available or socket is closed
-                        # docker-py socket wrapper read() function
-                        return docker_socket.read(1024)
-                    except Exception as e:  # pylint: disable=broad-exception-caught
-                        logger.debug("Docker socket read error/EOF: %s", e)
+                        buf = b""
+                        while len(buf) < n:
+                            chunk = docker_socket.read(n - len(buf))
+                            if not chunk:
+                                break
+                            buf += chunk
+                        return buf
+                    except Exception as e:
+                        logger.debug("Docker socket read error: %s", e)
                         return b""
 
-                data = await anyio.to_thread.run_sync(_read)
-                if not data:
+                # 1. Read 8-byte Docker stream header
+                header = await anyio.to_thread.run_sync(lambda: _read_exactly(8))
+                if not header:
+                    break
+                if len(header) < 8:
+                    text = header.decode("utf-8", errors="replace")
+                    await websocket.send_text(text)
                     break
 
-                # Decode bytes to text (replace invalid chars to prevent errors)
-                text = data.decode("utf-8", errors="replace")
+                # 2. Extract payload size (big-endian 32-bit integer at bytes 4-7)
+                size = int.from_bytes(header[4:8], byteorder="big")
+                if size <= 0:
+                    continue
+
+                # 3. Read exact payload bytes
+                payload = await anyio.to_thread.run_sync(lambda: _read_exactly(size))
+                if not payload:
+                    break
+
+                text = payload.decode("utf-8", errors="replace")
                 await websocket.send_text(text)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("Error in docker_to_ws loop: %s", e)
@@ -125,26 +130,32 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
                         if event == "resize":
                             cols = data_json.get("cols", 80)
                             rows = data_json.get("rows", 24)
-                            client.api.exec_resize(exec_id, height=rows, width=cols)
+                            await anyio.to_thread.run_sync(
+                                lambda: client.api.exec_resize(exec_id, height=rows, width=cols)
+                            )
                         elif event == "input":
                             input_data = data_json.get("data", "")
+                            print(f"DEBUG INPUT: {repr(input_data)}", flush=True)
                             await anyio.to_thread.run_sync(
-                                _safe_write, docker_socket, input_data.encode("utf-8")
+                                real_sock.sendall, input_data.encode("utf-8")
                             )
                         else:
                             # Other JSON, write raw
+                            print(f"DEBUG OTHER JSON INPUT: {repr(text_data)}", flush=True)
                             await anyio.to_thread.run_sync(
-                                _safe_write, docker_socket, text_data.encode("utf-8")
+                                real_sock.sendall, text_data.encode("utf-8")
                             )
                     except json.JSONDecodeError:
                         # Raw string input (terminal keystrokes)
+                        print(f"DEBUG RAW TEXT INPUT: {repr(text_data)}", flush=True)
                         await anyio.to_thread.run_sync(
-                            _safe_write, docker_socket, text_data.encode("utf-8")
+                            real_sock.sendall, text_data.encode("utf-8")
                         )
 
                 bytes_data = message.get("bytes")
                 if bytes_data:
-                    await anyio.to_thread.run_sync(_safe_write, docker_socket, bytes_data)
+                    print(f"DEBUG BYTES INPUT: {repr(bytes_data)}", flush=True)
+                    await anyio.to_thread.run_sync(real_sock.sendall, bytes_data)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
@@ -162,7 +173,8 @@ async def websocket_terminal(websocket: WebSocket, node_name: str):
     finally:
         closed = True
         try:
-            docker_socket.close()
+            real_sock.close()
         except Exception:  # pylint: disable=broad-exception-caught
             pass
         logger.info("Terminal session cleaned up")
+
