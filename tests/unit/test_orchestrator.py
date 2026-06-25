@@ -232,3 +232,128 @@ def test_get_topology_state_not_found(tmp_path, monkeypatch):
     assert res_dep == {"nodes": [], "edges": []}
 
 
+
+
+@mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
+def test_configure_node_rendering_ospf_abr_asbr_redistribute(mock_get_container, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    
+    mock_container = mock.MagicMock()
+    mock_get_container.return_value = mock_container
+    mock_container.exec_run.return_value = mock.MagicMock(exit_code=0, output=b"")
+    mock_container.image.tags = ["alpine-frr:latest"]
+    
+    orch = Orchestrator()
+    
+    config_data = {
+        "interfaces": [
+            {"name": "eth1", "ip_address": "10.0.0.1/24"},
+            {"name": "eth2", "ip_address": "10.0.1.1/24"}
+        ],
+        "vlan_interfaces": [],
+        "routing": {
+            "ospf": {
+                "enabled": True,
+                "router_id": "1.1.1.1",
+                "areas": [
+                    {
+                        "area_id": "0",
+                        "networks": ["10.0.0.0/24"],
+                        "interfaces": ["eth1"],
+                        "ranges": ["10.0.0.0/16"],
+                        "area_type": "stub"
+                    },
+                    {
+                        "area_id": "1",
+                        "networks": ["10.0.1.0/24"],
+                        "interfaces": ["eth2"],
+                        "ranges": [],
+                        "area_type": "totally-nssa"
+                    }
+                ],
+                "redistribute": {
+                    "connected": True,
+                    "static": True,
+                    "rip": True,
+                    "bgp": False
+                },
+                "default_information_originate": {
+                    "enabled": True,
+                    "always": True,
+                    "metric": 100
+                }
+            },
+            "rip": {
+                "enabled": True,
+                "networks": ["172.16.0.0/24"],
+                "redistribute": {
+                    "connected": False,
+                    "static": True,
+                    "ospf": True,
+                    "bgp": False
+                }
+            },
+            "bgp": {
+                "enabled": True,
+                "as_number": 65001,
+                "router_id": "1.1.1.1",
+                "neighbors": [
+                    {"ip_address": "10.0.0.2", "remote_as": 65002}
+                ],
+                "redistribute": {
+                    "connected": True,
+                    "static": False,
+                    "ospf": True,
+                    "rip": False
+                }
+            }
+        }
+    }
+    
+    res = orch.configure_node("r1", config_data)
+    assert res["status"] == "success"
+    
+    frr_conf_path = os.path.join(settings.CONFIG_DIR, "sim-network", "r1", "frr.conf")
+    assert os.path.exists(frr_conf_path)
+    with open(frr_conf_path, "r") as f:
+        written_content = f.read()
+        
+    # OSPF interface configs
+    assert "interface eth1" in written_content
+    assert "ip ospf area 0" in written_content
+    assert "interface eth2" in written_content
+    assert "ip ospf area 1" in written_content
+    
+    # OSPF router config
+    assert "router ospf" in written_content
+    assert "network 10.0.0.0/24 area 0" in written_content
+    assert "network 10.0.1.0/24 area 1" in written_content
+    assert "area 0 stub" in written_content
+    assert "area 1 nssa no-summary" in written_content
+    assert "area 0 range 10.0.0.0/16" in written_content
+    
+    # Check OSPF redistribute
+    # We want to check exact lines of OSPF block
+    ospf_section = written_content.split("router ospf")[1].split("!")[0]
+    assert "redistribute connected" in ospf_section
+    assert "redistribute static" in ospf_section
+    assert "redistribute rip" in ospf_section
+    assert "redistribute bgp" not in ospf_section
+    assert "default-information originate always metric 100" in ospf_section
+    
+    # RIP router config
+    assert "router rip" in written_content
+    rip_section = written_content.split("router rip")[1].split("!")[0]
+    assert "redistribute static" in rip_section
+    assert "redistribute ospf" in rip_section
+    assert "redistribute connected" not in rip_section
+    assert "redistribute bgp" not in rip_section
+    
+    # BGP router config
+    assert "router bgp 65001" in written_content
+    assert "address-family ipv4 unicast" in written_content
+    af_section = written_content.split("address-family ipv4 unicast")[1].split("exit-address-family")[0]
+    assert "redistribute connected" in af_section
+    assert "redistribute ospf" in af_section
+    assert "redistribute static" not in af_section
+    assert "redistribute rip" not in af_section

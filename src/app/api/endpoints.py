@@ -52,18 +52,38 @@ class VlanInterfaceConfig(BaseModel):
 class OspfAreaConfig(BaseModel):
     """Pydantic schema representing an OSPF area and its networks."""
     area_id: str
-    networks: List[str]
+    networks: List[str] = []
+    interfaces: Optional[List[str]] = []
+    ranges: Optional[List[str]] = []
+    area_type: Optional[str] = "normal"  # 'normal' | 'stub' | 'totally-stub' | 'nssa' | 'totally-nssa'
+
+class RedistributionConfig(BaseModel):
+    """Pydantic schema representing custom route redistribution options."""
+    connected: Optional[bool] = False
+    static: Optional[bool] = False
+    ospf: Optional[bool] = False
+    rip: Optional[bool] = False
+    bgp: Optional[bool] = False
+
+class OspfDefaultInformationOriginate(BaseModel):
+    """Pydantic schema representing OSPF default-information originate options."""
+    enabled: bool = False
+    always: Optional[bool] = False
+    metric: Optional[int] = None
 
 class OspfConfig(BaseModel):
     """Pydantic schema representing OSPF routing configuration."""
     enabled: bool = False
     router_id: Optional[str] = None
     areas: List[OspfAreaConfig] = []
+    redistribute: Optional[RedistributionConfig] = None
+    default_information_originate: Optional[OspfDefaultInformationOriginate] = None
 
 class RipConfig(BaseModel):
     """Pydantic schema representing RIP routing configuration."""
     enabled: bool = False
     networks: List[str] = []
+    redistribute: Optional[RedistributionConfig] = None
 
 class BgpNeighborConfig(BaseModel):
     """Pydantic schema representing a BGP neighbor config."""
@@ -76,6 +96,7 @@ class BgpConfig(BaseModel):
     as_number: Optional[int] = None
     router_id: Optional[str] = None
     neighbors: List[BgpNeighborConfig] = []
+    redistribute: Optional[RedistributionConfig] = None
 
 class RoutingConfig(BaseModel):
     """Pydantic schema grouping OSPF, RIP, and BGP routing configurations."""

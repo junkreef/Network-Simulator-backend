@@ -86,8 +86,10 @@ def test_configure_node_api(mock_orch_class, client: TestClient):
                 "enabled": True,
                 "router_id": "1.1.1.1",
                 "areas": [
-                    {"area_id": "0", "networks": ["10.0.0.0/24"]}
-                ]
+                    {"area_id": "0", "networks": ["10.0.0.0/24"], "interfaces": [], "ranges": [], "area_type": "normal"}
+                ],
+                "redistribute": None,
+                "default_information_originate": None
             },
             "rip": None,
             "bgp": None
@@ -160,7 +162,8 @@ def test_configure_node_api_bgp_and_gateway(mock_orch_class, client: TestClient)
                 "router_id": "1.1.1.1",
                 "neighbors": [
                     {"ip_address": "10.0.0.2", "remote_as": 65002}
-                ]
+                ],
+                "redistribute": None
             },
             "ospf": None,
             "rip": None

@@ -5,12 +5,26 @@ interface {{ iface.name }}
   {% if iface.ip_address %}
   ip address {{ iface.ip_address }}
   {% endif %}
+  {% if routing and routing.ospf and routing.ospf.enabled %}
+    {% for area in routing.ospf.areas %}
+      {% if area.interfaces and iface.name in area.interfaces %}
+  ip ospf area {{ area.area_id }}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
 !
 {% endfor %}
 {% for viface in vlan_interfaces %}
 interface {{ viface.name }}
   {% if viface.ip_address %}
   ip address {{ viface.ip_address }}
+  {% endif %}
+  {% if routing and routing.ospf and routing.ospf.enabled %}
+    {% for area in routing.ospf.areas %}
+      {% if area.interfaces and viface.name in area.interfaces %}
+  ip ospf area {{ area.area_id }}
+      {% endif %}
+    {% endfor %}
   {% endif %}
 !
 {% endfor %}
@@ -21,15 +35,42 @@ router ospf
   ospf router-id {{ routing.ospf.router_id }}
   {% endif %}
   {% for area in routing.ospf.areas %}
-    {% for net in area.networks %}
+    {% if area.networks %}
+      {% for net in area.networks %}
   network {{ net }} area {{ area.area_id }}
-    {% endfor %}
+      {% endfor %}
+    {% endif %}
+    {% if area.area_type == 'stub' %}
+  area {{ area.area_id }} stub
+    {% elif area.area_type == 'totally-stub' %}
+  area {{ area.area_id }} stub no-summary
+    {% elif area.area_type == 'nssa' %}
+  area {{ area.area_id }} nssa
+    {% elif area.area_type == 'totally-nssa' %}
+  area {{ area.area_id }} nssa no-summary
+    {% endif %}
+    {% if area.ranges %}
+      {% for r in area.ranges %}
+  area {{ area.area_id }} range {{ r }}
+      {% endfor %}
+    {% endif %}
   {% endfor %}
-  {% if routing.bgp and routing.bgp.enabled %}
-  redistribute bgp
-  {% endif %}
-  {% if routing.rip and routing.rip.enabled %}
+  {% if routing.ospf.redistribute %}
+    {% if routing.ospf.redistribute.connected %}
+  redistribute connected
+    {% endif %}
+    {% if routing.ospf.redistribute.static %}
+  redistribute static
+    {% endif %}
+    {% if routing.ospf.redistribute.rip and routing.rip and routing.rip.enabled %}
   redistribute rip
+    {% endif %}
+    {% if routing.ospf.redistribute.bgp and routing.bgp and routing.bgp.enabled %}
+  redistribute bgp
+    {% endif %}
+  {% endif %}
+  {% if routing.ospf.default_information_originate and routing.ospf.default_information_originate.enabled %}
+  default-information originate{% if routing.ospf.default_information_originate.always %} always{% endif %}{% if routing.ospf.default_information_originate.metric is not none %} metric {{ routing.ospf.default_information_originate.metric }}{% endif %}
   {% endif %}
 !
 {% endif %}
@@ -38,11 +79,19 @@ router rip
   {% for net in routing.rip.networks %}
   network {{ net }}
   {% endfor %}
-  {% if routing.bgp and routing.bgp.enabled %}
-  redistribute bgp
-  {% endif %}
-  {% if routing.ospf and routing.ospf.enabled %}
+  {% if routing.rip.redistribute %}
+    {% if routing.rip.redistribute.connected %}
+  redistribute connected
+    {% endif %}
+    {% if routing.rip.redistribute.static %}
+  redistribute static
+    {% endif %}
+    {% if routing.rip.redistribute.ospf and routing.ospf and routing.ospf.enabled %}
   redistribute ospf
+    {% endif %}
+    {% if routing.rip.redistribute.bgp and routing.bgp and routing.bgp.enabled %}
+  redistribute bgp
+    {% endif %}
   {% endif %}
 !
 {% endif %}
@@ -60,12 +109,22 @@ router bgp {{ routing.bgp.as_number }}
     {% for neighbor in routing.bgp.neighbors %}
     neighbor {{ neighbor.ip_address }} activate
     {% endfor %}
+    {% if routing.bgp.redistribute %}
+      {% if routing.bgp.redistribute.connected %}
     redistribute connected
-    {% if routing.ospf and routing.ospf.enabled %}
+      {% endif %}
+      {% if routing.bgp.redistribute.static %}
+    redistribute static
+      {% endif %}
+      {% if routing.bgp.redistribute.ospf and routing.ospf and routing.ospf.enabled %}
     redistribute ospf
-    {% endif %}
-    {% if routing.rip and routing.rip.enabled %}
+      {% endif %}
+      {% if routing.bgp.redistribute.rip and routing.rip and routing.rip.enabled %}
     redistribute rip
+      {% endif %}
+    {% else %}
+    {# デフォルト動作としてConnectedのみ再配送 #}
+    redistribute connected
     {% endif %}
   exit-address-family
 !
