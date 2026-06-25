@@ -155,16 +155,106 @@ class Orchestrator:
         )
 
         topo_filepath = self.get_topology_filepath()
+
+        # Check if existing topology file is identical to skip deployment
+        is_identical = False
+        if os.path.exists(topo_filepath):
+            try:
+                with open(topo_filepath, "r", encoding="utf-8") as f:
+                    existing_yml = f.read()
+                if existing_yml == rendered_yml:
+                    is_identical = True
+            except Exception as e:
+                logger.warning("Failed to read existing topology file for comparison: %s", e)
+
+        if is_identical:
+            logger.info("Topology configuration is identical. Skipping containerlab deploy.")
+            return {
+                "status": "skipped",
+                "message": "Topology is identical, skipping deploy",
+                "details": {
+                    "name": topology_name,
+                    "container_count": len(nodes)
+                }
+            }
+
+        # Load previously deployed topology for differential cleanup
+        deployed_data_path = os.path.join(settings.CONFIG_DIR, "topology_deployed_data.json")
+        old_topology = {"nodes": [], "links": []}
+        if os.path.exists(deployed_data_path):
+            try:
+                with open(deployed_data_path, "r", encoding="utf-8") as f:
+                    old_topology = json.load(f)
+            except Exception as e:
+                logger.warning("Failed to load previously deployed topology data: %s", e)
+
+        # 1. Detect and stop/remove deleted nodes
+        old_nodes_set = {n.get("name") for n in old_topology.get("nodes", []) if n.get("name")}
+        new_nodes_set = {n.get("name") for n in nodes if n.get("name")}
+        deleted_nodes = old_nodes_set - new_nodes_set
+
+        for node_name in deleted_nodes:
+            container = self._get_container_by_name(node_name)
+            if container:
+                try:
+                    logger.info("Stopping and removing deleted node container: %s", container.name)
+                    container.stop(timeout=5)
+                    container.remove()
+                except Exception as e:
+                    logger.warning("Failed to stop/remove container %s: %s", node_name, e)
+            
+            # Cleanup config directory on host
+            node_config_dir = os.path.join(settings.CONFIG_DIR, topology_name, node_name)
+            if os.path.exists(node_config_dir):
+                try:
+                    shutil.rmtree(node_config_dir)
+                except Exception as e:
+                    logger.warning("Failed to cleanup config directory for %s: %s", node_name, e)
+
+        # 2. Detect and delete interfaces for deleted links
+        def make_link_key(link):
+            endpoints = link.get("endpoints", [])
+            if len(endpoints) == 2:
+                return frozenset(endpoints)
+            return None
+
+        old_links_set = {make_link_key(l) for l in old_topology.get("links", []) if make_link_key(l)}
+        new_links_set = {make_link_key(l) for l in links if make_link_key(l)}
+        deleted_links = old_links_set - new_links_set
+
+        for link_key in deleted_links:
+            endpoints = list(link_key)
+            for ep in endpoints:
+                if ":" in ep:
+                    node_name, iface = ep.split(":", 1)
+                    if node_name in new_nodes_set:
+                        container = self._get_container_by_name(node_name)
+                        if container:
+                            try:
+                                # veth deletion on one side removes the other side automatically
+                                res = container.exec_run(["ip", "link", "delete", iface])
+                                if res.exit_code == 0:
+                                    logger.info("Successfully deleted dangling interface %s on %s", iface, node_name)
+                                    break
+                            except Exception as e:
+                                logger.warning("Failed to delete interface %s on %s: %s", iface, node_name, e)
+
         with open(topo_filepath, "w", encoding="utf-8") as f:
             f.write(rendered_yml)
             f.flush()
             os.fsync(f.fileno())
 
-        # 3. Execute containerlab deploy
-        # We use --reconfigure to ensure everything is rebuilt cleanly
+        # 3. Execute containerlab deploy without --reconfigure
         time.sleep(1)
-        cmd = ["containerlab", "deploy", "-t", topo_filepath, "--reconfigure"]
+        cmd = ["containerlab", "deploy", "-t", topo_filepath]
         self._run_cmd(cmd)
+
+        # Save deployed topology data for next diff comparison
+        try:
+            with open(deployed_data_path, "w", encoding="utf-8") as f:
+                json.dump(topology_data, f, indent=2)
+        except Exception as e:
+            logger.warning("Failed to save deployed topology data: %s", e)
 
         return {
             "status": "success",
@@ -201,6 +291,10 @@ class Orchestrator:
             # Remove the topology file as well
             if os.path.exists(topo_filepath):
                 os.remove(topo_filepath)
+            # Remove helper files as well
+            deployed_data_path = os.path.join(settings.CONFIG_DIR, "topology_deployed_data.json")
+            if os.path.exists(deployed_data_path):
+                os.remove(deployed_data_path)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Error during configs cleanup: %s", e)
 
