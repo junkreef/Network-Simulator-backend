@@ -320,9 +320,7 @@ def test_configure_node_rendering_ospf_abr_asbr_redistribute(mock_get_container,
         
     # OSPF interface configs
     assert "interface eth1" in written_content
-    assert "ip ospf area 0" in written_content
     assert "interface eth2" in written_content
-    assert "ip ospf area 1" in written_content
     
     # OSPF router config
     assert "router ospf" in written_content

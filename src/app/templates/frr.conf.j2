@@ -5,26 +5,12 @@ interface {{ iface.name }}
   {% if iface.ip_address %}
   ip address {{ iface.ip_address }}
   {% endif %}
-  {% if routing and routing.ospf and routing.ospf.enabled %}
-    {% for area in routing.ospf.areas %}
-      {% if area.interfaces and iface.name in area.interfaces %}
-  ip ospf area {{ area.area_id }}
-      {% endif %}
-    {% endfor %}
-  {% endif %}
 !
 {% endfor %}
 {% for viface in vlan_interfaces %}
 interface {{ viface.name }}
   {% if viface.ip_address %}
   ip address {{ viface.ip_address }}
-  {% endif %}
-  {% if routing and routing.ospf and routing.ospf.enabled %}
-    {% for area in routing.ospf.areas %}
-      {% if area.interfaces and viface.name in area.interfaces %}
-  ip ospf area {{ area.area_id }}
-      {% endif %}
-    {% endfor %}
   {% endif %}
 !
 {% endfor %}
