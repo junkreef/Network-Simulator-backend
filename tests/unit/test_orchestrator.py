@@ -144,8 +144,11 @@ def test_configure_node_rendering_bgp_and_gateway(mock_get_container, tmp_path, 
     # Assert BGP rendering
     assert "router bgp 65001" in written_content
     assert "bgp router-id 1.1.1.1" in written_content
+    assert "no bgp ebgp-requires-policy" in written_content
     assert "neighbor 10.0.0.2 remote-as 65002" in written_content
+    assert "address-family ipv4 unicast" in written_content
     assert "neighbor 10.0.0.2 activate" in written_content
+    assert "redistribute connected" in written_content
 
     # Assert Static Route / Gateway rendering (This might fail currently)
     assert "ip route 0.0.0.0/0 10.0.0.254" in written_content or "ip route" in written_content

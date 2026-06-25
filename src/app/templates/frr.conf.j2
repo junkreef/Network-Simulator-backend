@@ -25,6 +25,12 @@ router ospf
   network {{ net }} area {{ area.area_id }}
     {% endfor %}
   {% endfor %}
+  {% if routing.bgp and routing.bgp.enabled %}
+  redistribute bgp
+  {% endif %}
+  {% if routing.rip and routing.rip.enabled %}
+  redistribute rip
+  {% endif %}
 !
 {% endif %}
 {% if routing and routing.rip and routing.rip.enabled %}
@@ -32,6 +38,12 @@ router rip
   {% for net in routing.rip.networks %}
   network {{ net }}
   {% endfor %}
+  {% if routing.bgp and routing.bgp.enabled %}
+  redistribute bgp
+  {% endif %}
+  {% if routing.ospf and routing.ospf.enabled %}
+  redistribute ospf
+  {% endif %}
 !
 {% endif %}
 {% if routing and routing.bgp and routing.bgp.enabled %}
@@ -39,10 +51,23 @@ router bgp {{ routing.bgp.as_number }}
   {% if routing.bgp.router_id %}
   bgp router-id {{ routing.bgp.router_id }}
   {% endif %}
+  no bgp ebgp-requires-policy
   {% for neighbor in routing.bgp.neighbors %}
   neighbor {{ neighbor.ip_address }} remote-as {{ neighbor.remote_as }}
-  neighbor {{ neighbor.ip_address }} activate
   {% endfor %}
+!
+  address-family ipv4 unicast
+    {% for neighbor in routing.bgp.neighbors %}
+    neighbor {{ neighbor.ip_address }} activate
+    {% endfor %}
+    redistribute connected
+    {% if routing.ospf and routing.ospf.enabled %}
+    redistribute ospf
+    {% endif %}
+    {% if routing.rip and routing.rip.enabled %}
+    redistribute rip
+    {% endif %}
+  exit-address-family
 !
 {% endif %}
 !
