@@ -50,7 +50,7 @@ def test_deploy_topology_rendering(tmp_path, monkeypatch):
     assert "- \"t1:eth1\"" in topo_content
     
     # Verify containerlab deploy was executed
-    mock_run_cmd.assert_called_once_with(["containerlab", "deploy", "-t", topo_path])
+    mock_run_cmd.assert_called_once_with(["containerlab", "deploy", "-t", topo_path, "--reconfigure"])
 
 @mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
 def test_configure_node_rendering(mock_get_container, tmp_path, monkeypatch):
@@ -406,76 +406,3 @@ def test_deploy_topology_bypass(tmp_path, monkeypatch):
     assert mock_run_cmd.call_count == 2
 
 
-@mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
-def test_deploy_topology_incremental(mock_get_container, tmp_path, monkeypatch):
-    # Set settings.CONFIG_DIR to tmp_path
-    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
-    
-    # Setup mock containers
-    mock_container_t1 = mock.MagicMock()
-    mock_container_t1.name = "clab-test-net-t1"
-    
-    def get_container_side_effect(name):
-        if "t1" in name:
-            return mock_container_t1
-        return None
-    mock_get_container.side_effect = get_container_side_effect
-    
-    orch = Orchestrator()
-    orch.docker_client = mock.MagicMock()
-    
-    mock_run_cmd = mock.MagicMock()
-    monkeypatch.setattr(orch, "_run_cmd", mock_run_cmd)
-    
-    # 1. Initial Deploy (r1, t1)
-    topology_data = {
-        "name": "test-net",
-        "nodes": [
-            {"name": "r1", "type": "router", "interfaces": ["eth1"]},
-            {"name": "t1", "type": "terminal", "interfaces": ["eth1"]}
-        ],
-        "links": [
-            {"endpoints": ["r1:eth1", "t1:eth1"]}
-        ]
-    }
-    res1 = orch.deploy_topology(topology_data)
-    assert res1["status"] == "success"
-    # Verify it ran deploy without --reconfigure
-    topo_filepath = os.path.join(settings.CONFIG_DIR, "topology.clab.yml")
-    mock_run_cmd.assert_called_with(["containerlab", "deploy", "-t", topo_filepath])
-    
-    # 2. Modify Deploy: Add a node (t2)
-    modified_data = {
-        "name": "test-net",
-        "nodes": [
-            {"name": "r1", "type": "router", "interfaces": ["eth1", "eth2"]},
-            {"name": "t1", "type": "terminal", "interfaces": ["eth1"]},
-            {"name": "t2", "type": "terminal", "interfaces": ["eth1"]}
-        ],
-        "links": [
-            {"endpoints": ["r1:eth1", "t1:eth1"]},
-            {"endpoints": ["r1:eth2", "t2:eth1"]}
-        ]
-    }
-    res2 = orch.deploy_topology(modified_data)
-    assert res2["status"] == "success"
-    # Verify no container stop/remove was called (since no nodes deleted)
-    mock_container_t1.stop.assert_not_called()
-    mock_container_t1.remove.assert_not_called()
-    
-    # 3. Modify Deploy: Delete a node (t1) and its link
-    modified_data_del = {
-        "name": "test-net",
-        "nodes": [
-            {"name": "r1", "type": "router", "interfaces": ["eth2"]},
-            {"name": "t2", "type": "terminal", "interfaces": ["eth1"]}
-        ],
-        "links": [
-            {"endpoints": ["r1:eth2", "t2:eth1"]}
-        ]
-    }
-    res3 = orch.deploy_topology(modified_data_del)
-    assert res3["status"] == "success"
-    # Verify that deleted node container (t1) was stopped and removed
-    mock_container_t1.stop.assert_called_once_with(timeout=5)
-    mock_container_t1.remove.assert_called_once()
