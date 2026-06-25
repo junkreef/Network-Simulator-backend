@@ -204,3 +204,16 @@ def test_save_topology_state_api(mock_orch_class, client: TestClient):
     assert response.json()["status"] == "success"
     mock_orch.save_topology_state.assert_called_once_with(payload, deployed=False)
 
+
+import inspect
+from app.api.endpoints import configure_node, deploy_topology, destroy_topology, get_topology_status, get_runtime_info
+
+def test_route_handlers_are_synchronous():
+    # Verify that heavy-load API handlers are defined as synchronous (def) instead of asynchronous (async def)
+    # This ensures FastAPI runs them in a threadpool so blocking I/O does not block the main event loop.
+    assert not inspect.iscoroutinefunction(configure_node)
+    assert not inspect.iscoroutinefunction(deploy_topology)
+    assert not inspect.iscoroutinefunction(destroy_topology)
+    assert not inspect.iscoroutinefunction(get_topology_status)
+    assert not inspect.iscoroutinefunction(get_runtime_info)
+

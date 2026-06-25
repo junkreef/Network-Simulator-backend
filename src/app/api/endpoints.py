@@ -123,7 +123,7 @@ class RouterConfigureRequest(BaseModel):
 # --- Endpoints ---
 
 @router.post("/topology/deploy")
-async def deploy_topology(request: TopologyDeployRequest):
+def deploy_topology(request: TopologyDeployRequest):
     """Deploys a containerlab network topology based on the provided nodes and links.
 
     Renders the topology YAML, spawns the Docker containers, and sets up interfaces.
@@ -141,7 +141,7 @@ async def deploy_topology(request: TopologyDeployRequest):
         ) from e
 
 @router.post("/topology/destroy")
-async def destroy_topology():
+def destroy_topology():
     """Destroys the currently active containerlab topology, cleaning up docker containers."""
     orchestrator = Orchestrator()
     try:
@@ -153,7 +153,7 @@ async def destroy_topology():
         ) from e
 
 @router.get("/topology/status")
-async def get_topology_status():
+def get_topology_status():
     """Retrieves the runtime status (running or not) of the deployed nodes in the topology."""
     orchestrator = Orchestrator()
     try:
@@ -165,7 +165,7 @@ async def get_topology_status():
         ) from e
 
 @router.post("/nodes/{node_name}/configure")
-async def configure_node(node_name: str, request: RouterConfigureRequest):
+def configure_node(node_name: str, request: RouterConfigureRequest):
     """Configures interfaces, routing, and dynamic routing protocols (OSPF/RIP/BGP)
     on a specific node.
 
@@ -183,7 +183,7 @@ async def configure_node(node_name: str, request: RouterConfigureRequest):
         ) from e
 
 @router.get("/nodes/{node_name}/runtime-info")
-async def get_runtime_info(
+def get_runtime_info(
     node_name: str,
     info_type: str = Query(
         ...,
@@ -213,7 +213,7 @@ async def get_runtime_info(
         ) from e
 
 @router.get("/topology/state")
-async def get_topology_state(
+def get_topology_state(
     deployed: bool = Query(False, description="Whether to get the deployed state")
 ):
     """Retrieves the saved frontend UI topology state (nodes and edges layout)."""
@@ -227,7 +227,7 @@ async def get_topology_state(
         ) from e
 
 @router.post("/topology/state")
-async def save_topology_state(
+def save_topology_state(
     request: Dict[str, Any],
     deployed: bool = Query(False, description="Whether to save as deployed state")
 ):
@@ -242,7 +242,7 @@ async def save_topology_state(
         ) from e
 
 @router.delete("/topology/state")
-async def delete_topology_state():
+def delete_topology_state():
     """Resets the topology state by deleting saved files from CONFIG_DIR."""
     orchestrator = Orchestrator()
     try:

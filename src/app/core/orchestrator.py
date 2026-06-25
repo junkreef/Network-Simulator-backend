@@ -155,13 +155,35 @@ class Orchestrator:
         )
 
         topo_filepath = self.get_topology_filepath()
+
+        # Check if existing topology file is identical to skip deployment
+        is_identical = False
+        if os.path.exists(topo_filepath):
+            try:
+                with open(topo_filepath, "r", encoding="utf-8") as f:
+                    existing_yml = f.read()
+                if existing_yml == rendered_yml:
+                    is_identical = True
+            except Exception as e:
+                logger.warning("Failed to read existing topology file for comparison: %s", e)
+
+        if is_identical:
+            logger.info("Topology configuration is identical. Skipping containerlab deploy.")
+            return {
+                "status": "skipped",
+                "message": "Topology is identical, skipping deploy",
+                "details": {
+                    "name": topology_name,
+                    "container_count": len(nodes)
+                }
+            }
+
         with open(topo_filepath, "w", encoding="utf-8") as f:
             f.write(rendered_yml)
             f.flush()
             os.fsync(f.fileno())
 
-        # 3. Execute containerlab deploy
-        # We use --reconfigure to ensure everything is rebuilt cleanly
+        # 3. Execute containerlab deploy with --reconfigure
         time.sleep(1)
         cmd = ["containerlab", "deploy", "-t", topo_filepath, "--reconfigure"]
         self._run_cmd(cmd)
@@ -201,6 +223,10 @@ class Orchestrator:
             # Remove the topology file as well
             if os.path.exists(topo_filepath):
                 os.remove(topo_filepath)
+            # Remove helper files as well
+            deployed_data_path = os.path.join(settings.CONFIG_DIR, "topology_deployed_data.json")
+            if os.path.exists(deployed_data_path):
+                os.remove(deployed_data_path)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Error during configs cleanup: %s", e)
 

@@ -355,3 +355,54 @@ def test_configure_node_rendering_ospf_abr_asbr_redistribute(mock_get_container,
     assert "redistribute ospf" in af_section
     assert "redistribute static" not in af_section
     assert "redistribute rip" not in af_section
+
+
+def test_deploy_topology_bypass(tmp_path, monkeypatch):
+    # Set settings.CONFIG_DIR to tmp_path to avoid writing to actual configs during test
+    monkeypatch.setattr(settings, "CONFIG_DIR", str(tmp_path))
+    
+    orch = Orchestrator()
+    
+    # Mock shell commands
+    mock_run_cmd = mock.MagicMock()
+    monkeypatch.setattr(orch, "_run_cmd", mock_run_cmd)
+    
+    topology_data = {
+        "name": "test-net",
+        "nodes": [
+            {"name": "r1", "type": "router", "interfaces": ["eth1"]},
+            {"name": "t1", "type": "terminal", "interfaces": ["eth1"]}
+        ],
+        "links": [
+            {"endpoints": ["r1:eth1", "t1:eth1"]}
+        ]
+    }
+    
+    # First deploy: should success and run command
+    res1 = orch.deploy_topology(topology_data)
+    assert res1["status"] == "success"
+    assert mock_run_cmd.call_count == 1
+    
+    # Second deploy with exact same payload: should return skipped and NOT run command again
+    res2 = orch.deploy_topology(topology_data)
+    assert res2["status"] == "skipped"
+    assert mock_run_cmd.call_count == 1 # still 1
+    
+    # Third deploy with modified payload: should success and run command again
+    modified_data = {
+        "name": "test-net",
+        "nodes": [
+            {"name": "r1", "type": "router", "interfaces": ["eth1", "eth2"]},
+            {"name": "t1", "type": "terminal", "interfaces": ["eth1"]},
+            {"name": "t2", "type": "terminal", "interfaces": ["eth1"]}
+        ],
+        "links": [
+            {"endpoints": ["r1:eth1", "t1:eth1"]},
+            {"endpoints": ["r1:eth2", "t2:eth1"]}
+        ]
+    }
+    res3 = orch.deploy_topology(modified_data)
+    assert res3["status"] == "success"
+    assert mock_run_cmd.call_count == 2
+
+
