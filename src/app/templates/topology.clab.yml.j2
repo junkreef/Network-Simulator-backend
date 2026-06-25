@@ -22,7 +22,7 @@ topology:
       exec:
         # 起動後にインターフェース設定等を適用するための初期化コマンド
         {% for iface in node.interfaces %}
-        - ip link set dev {{ iface }} up || true
+        - ip link set dev {{ iface }} up
         {% endfor %}
     {% endfor %}
 
