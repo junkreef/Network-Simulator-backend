@@ -406,3 +406,19 @@ def test_deploy_topology_bypass(tmp_path, monkeypatch):
     assert mock_run_cmd.call_count == 2
 
 
+@mock.patch("app.core.orchestrator.Orchestrator._get_container_by_name")
+def test_configure_interface_state(mock_get_container):
+    mock_container = mock.MagicMock()
+    mock_get_container.return_value = mock_container
+    mock_container.exec_run.return_value = mock.MagicMock(exit_code=0, output=b"")
+
+    orch = Orchestrator()
+    orch.docker_client = mock.MagicMock()
+
+    res = orch.configure_interface_state("r1", "eth1", "down")
+    assert res["status"] == "success"
+    assert res["details"]["state"] == "down"
+
+    mock_container.exec_run.assert_called_once_with(["ip", "link", "set", "dev", "eth1", "down"])
+
+

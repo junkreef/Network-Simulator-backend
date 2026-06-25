@@ -212,6 +212,23 @@ def get_runtime_info(
             status_code=500, detail=f"Failed to get runtime info for {node_name}: {str(e)}"
         ) from e
 
+@router.post("/nodes/{node_name}/interfaces/{interface_name}/state")
+def configure_interface_state(
+    node_name: str,
+    interface_name: str,
+    state: str = Query(..., pattern="^(up|down)$", description="Target interface state (up or down)")
+):
+    """Configures the administrative state (up or down) of a specific interface on a node."""
+    orchestrator = Orchestrator()
+    try:
+        result = orchestrator.configure_interface_state(node_name, interface_name, state)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to configure interface state for {node_name} {interface_name}: {str(e)}"
+        ) from e
+
 @router.get("/topology/state")
 def get_topology_state(
     deployed: bool = Query(False, description="Whether to get the deployed state")

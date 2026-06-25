@@ -730,3 +730,31 @@ class Orchestrator:
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to delete topology state: %s", e)
             raise e
+
+    def configure_interface_state(self, node_name: str, interface_name: str, state: str) -> dict:
+        """Configure the state (up/down) of an interface inside a node's container."""
+        if not self.docker_client:
+            raise OrchestratorError("Docker client not initialized")
+
+        container = self._get_container_by_name(node_name)
+        if not container:
+            raise OrchestratorError(f"Container for node {node_name} not found")
+
+        if state not in ("up", "down"):
+            raise OrchestratorError(f"Invalid interface state: {state}")
+
+        res = container.exec_run(["ip", "link", "set", "dev", interface_name, state])
+        if res.exit_code != 0:
+            raise OrchestratorError(
+                f"Failed to set interface {interface_name} to {state}: {res.output.decode()}"
+            )
+
+        return {
+            "status": "success",
+            "message": f"Interface {interface_name} set to {state} successfully",
+            "details": {
+                "node_name": node_name,
+                "interface_name": interface_name,
+                "state": state
+            }
+        }

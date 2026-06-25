@@ -205,8 +205,27 @@ def test_save_topology_state_api(mock_orch_class, client: TestClient):
     mock_orch.save_topology_state.assert_called_once_with(payload, deployed=False)
 
 
+@mock.patch("app.api.endpoints.Orchestrator")
+def test_configure_interface_state_api(mock_orch_class, client: TestClient):
+    mock_orch = mock_orch_class.return_value
+    mock_orch.configure_interface_state.return_value = {
+        "status": "success",
+        "message": "Interface eth1 set to down successfully",
+        "details": {
+            "node_name": "r1",
+            "interface_name": "eth1",
+            "state": "down"
+        }
+    }
+
+    response = client.post("/api/v1/nodes/r1/interfaces/eth1/state?state=down")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_orch.configure_interface_state.assert_called_once_with("r1", "eth1", "down")
+
+
 import inspect
-from app.api.endpoints import configure_node, deploy_topology, destroy_topology, get_topology_status, get_runtime_info
+from app.api.endpoints import configure_node, deploy_topology, destroy_topology, get_topology_status, get_runtime_info, configure_interface_state
 
 def test_route_handlers_are_synchronous():
     # Verify that heavy-load API handlers are defined as synchronous (def) instead of asynchronous (async def)
@@ -216,4 +235,5 @@ def test_route_handlers_are_synchronous():
     assert not inspect.iscoroutinefunction(destroy_topology)
     assert not inspect.iscoroutinefunction(get_topology_status)
     assert not inspect.iscoroutinefunction(get_runtime_info)
+    assert not inspect.iscoroutinefunction(configure_interface_state)
 
