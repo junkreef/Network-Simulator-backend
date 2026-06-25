@@ -13,7 +13,8 @@ RUN apk add --no-cache \
     net-tools \
     iputils \
     tcpdump \
-    tini
+    tini \
+    mtr
 
 # ルーティングデーモンの設定 (daemonsファイル)
 # デフォルトで zebra, ospfd, bgpd, ripd を有効化するように設定

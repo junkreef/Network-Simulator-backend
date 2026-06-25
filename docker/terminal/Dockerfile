@@ -11,7 +11,8 @@ RUN apk add --no-cache \
     iputils \
     curl \
     tcpdump \
-    iperf3
+    iperf3 \
+    mtr
 
 # コンテナが即座に終了するのを防ぐためのデフォルトコマンド
 CMD ["sleep", "infinity"]

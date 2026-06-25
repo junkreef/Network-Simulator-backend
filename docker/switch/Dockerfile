@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     iproute2 \
     net-tools \
     iputils \
-    tcpdump
+    tcpdump \
+    mtr
 
 # コンテナが即座に終了するのを防ぐためのデフォルトコマンド
 CMD ["sleep", "infinity"]
